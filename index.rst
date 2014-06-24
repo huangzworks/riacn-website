@@ -116,7 +116,7 @@ Josiah 开始创作这本《Redis 实战》。
 并通过分析源码创作了\ `《Redis 设计与实现》 <http://redisbook.com>`_\ 一书。
 
 除此之外，
-他还是 Redis 中文文档\ `《Redis 命令参考》 <http://RedisDoc.com>`_\ 的译者，
+黄健宏还是 Redis 中文文档\ `《Redis 命令参考》 <http://RedisDoc.com>`_\ 的译者，
 以及\ `《Redis 从入门到精通》课程 <http://www.chinahadoop.cn/course/53>`_\ 的讲师。
 
 要了解关于《Redis 实战》译者黄健宏（huangz）的更多信息，
