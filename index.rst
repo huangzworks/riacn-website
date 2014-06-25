@@ -28,6 +28,7 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
 请定期访问本网站，
 或者关注译者的\ `微博 <http://weibo.com/huangz1990>`_\ 、\ `豆瓣 <http://www.douban.com/people/i_m_huangz/>`_\ 、\ `twitter <https://twitter.com/huangz1990>`_\ 。
 
+
 目录以及翻译进度
 ------------------
 
@@ -74,7 +75,6 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
 +---------------------------------------------------+-----------+
 | 附录 B ： 其他资源以及引用参考                    | 已完成    |
 +---------------------------------------------------+-----------+
-
 
 
 作者简介
@@ -132,5 +132,9 @@ http://www.manning.com/carlson/
 《Redis in Action》书中的源码示例：
 https://github.com/josiahcarlson/redis-in-action
 
-《Redis in Action》在 Amazon.com 的页面： 
-http://www.amazon.com/Redis-Action-Josiah-L-Carlson/dp/1617290858
+《Redis in Action》在 
+`亚马逊 <http://www.amazon.cn/Redis-in-Action-Carlson-Josiah-L/dp/1617290858>`_ 、 
+`amazon.com <http://www.amazon.com/Redis-Action-Josiah-L-Carlson/dp/1617290858>`_ 
+以及
+`豆瓣 <http://book.douban.com/subject/10597898/>`_ 
+的页面。
