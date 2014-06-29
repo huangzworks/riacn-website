@@ -103,7 +103,7 @@ Josiah 加入了 Redis 邮件列表，
 在离开 Adly 公司并成为 ChowNow 公司的首席架构师兼联合创始人之后不久，
 Josiah 开始创作这本《Redis 实战》。
 
-要了解关于《Redis 实战》作者 Josiah Carlson 的更多信息，
+要了解关于《Redis 实战》作者 Josiah Carlson 博士的更多信息，
 请访问他的 `twitter <https://twitter.com/dr_josiah>`_ 、 `博客 <http://www.dr-josiah.com/>`_ 或者 `github <https://github.com/josiahcarlson>`_ 。
 
 
