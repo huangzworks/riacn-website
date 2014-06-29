@@ -112,7 +112,7 @@ Josiah 开始创作这本《Redis 实战》。
 
 黄健宏（huangz）在 2011 年开始接触 Redis 以来就一直在学习和研究 Redis ，
 他从 Redis 2.4 开始阅读并追踪 Redis 的源码，
-对 `Redis 2.6 <https://github.com/huangz1990/annotated_redis_source>`_ 以及 `Redis 3.0 <http://www.douban.com/people/i_m_huangz/status/1422460946/>`_ 的源码进行了详细的注释，
+对 `Redis 2.6 <https://github.com/huangz1990/annotated_redis_source>`_ 以及 `Redis 3.0 <https://github.com/huangz1990/redis-3.0-annotated>`_ 的源码进行了详细的注释，
 并通过分析源码创作了\ `《Redis 设计与实现》 <http://redisbook.com>`_\ 一书。
 
 除此之外，
