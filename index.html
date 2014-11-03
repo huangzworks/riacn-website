@@ -1,0 +1,237 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Redis 实战 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="#" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li><a href="#">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="redis">
+<h1>Redis 实战<a class="headerlink" href="#redis" title="Permalink to this headline">¶</a></h1>
+<a class="reference internal image-reference" href="_images/ria-cover.png"><img alt="_images/ria-cover.png" class="align-left" src="_images/ria-cover.png" width="20%" height="20%"/></a>
+<p>《Redis in Action》是由 Josiah Carlson 博士编写，
+Manning 出版社出版的一本关于 Redis 应用方面的书籍，
+该书深入浅出地介绍了 Redis 的五种数据类型，
+并通过多个实用例子展示了 Redis 的用法，
+除此之外，
+该书还讲述了 Redis 的优化方法以及扩展方法，
+是一本对于学习和使用 Redis 来说不可多得的参考书籍。</p>
+<p>《Redis 实战》是《Redis in Action》一书的简体中文翻译版，
+译者为黄健宏（huangz），
+<strong>翻译工作目前正在进行中，</strong>
+翻译完成之后将由人民邮电出版社出版。</p>
+<p>要了解本书的最新消息，
+以及目前的翻译进度，
+请定期访问本网站，
+或者关注译者的<a class="reference external" href="http://weibo.com/huangz1990">微博</a>、<a class="reference external" href="http://www.douban.com/people/i_m_huangz/">豆瓣</a>、<a class="reference external" href="https://twitter.com/huangz1990">twitter</a>。</p>
+<div class="section" id="id3">
+<h2>目录以及翻译进度<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>以下表格展示了《Redis in Action》一书的各个章节，
+以及这些章节目前的翻译进度。</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="82%" />
+<col width="18%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">章节</th>
+<th class="head">翻译进度</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>序</td>
+<td>已完成</td>
+</tr>
+<tr class="row-odd"><td>前言</td>
+<td>已完成</td>
+</tr>
+<tr class="row-even"><td>致谢</td>
+<td>已完成</td>
+</tr>
+<tr class="row-odd"><td>关于此书</td>
+<td>已完成</td>
+</tr>
+<tr class="row-even"><td>关于本书封面插图</td>
+<td>已完成</td>
+</tr>
+<tr class="row-odd"><td>第 1 章： 初识 Redis</td>
+<td>已完成</td>
+</tr>
+<tr class="row-even"><td>第 2 章： 使用 Redis 构建 web 应用</td>
+<td>已完成</td>
+</tr>
+<tr class="row-odd"><td>第 3 章： Redis 命令</td>
+<td>已完成</td>
+</tr>
+<tr class="row-even"><td>第 4 章： 数据安全与性能保障</td>
+<td>已完成</td>
+</tr>
+<tr class="row-odd"><td>第 5 章： 使用 Redis 构建支持程序</td>
+<td>已完成</td>
+</tr>
+<tr class="row-even"><td>第 6 章： 使用 Redis 构建应用组件</td>
+<td>进行中</td>
+</tr>
+<tr class="row-odd"><td>第 7 章： 基于搜索的应用程序</td>
+<td>未开始</td>
+</tr>
+<tr class="row-even"><td>第 8 章： 构建简单的社交网站</td>
+<td>已完成</td>
+</tr>
+<tr class="row-odd"><td>第 9 章： 减少内存占用</td>
+<td>进行中</td>
+</tr>
+<tr class="row-even"><td>第 10 章： 扩展 Redis</td>
+<td>未开始</td>
+</tr>
+<tr class="row-odd"><td>第 11 章： 使用 Lua 语言在 Redis 中进行脚本编程</td>
+<td>未开始</td>
+</tr>
+<tr class="row-even"><td>附录 A ： 快速安装步骤</td>
+<td>已完成</td>
+</tr>
+<tr class="row-odd"><td>附录 B ： 其他资源以及引用参考</td>
+<td>已完成</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="id4">
+<h2>作者简介<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>在大学毕业之后，
+Josiah Carlson 博士继续在加州大学欧文分校学习理论计算机科学。
+在学习之余，
+Josiah 还断断续续地做过一些助教工作，
+并偶尔承接一些编程方面的工作。
+在 Josiah 即将要研究生毕业的时候，
+他发现教职方面的工作机会并不多，
+于是他加入了 Networks in Motion 公司，
+开始了自己的职业生涯。
+在 Networks in Motion 公司期间，
+Josiah 负责开发实时 GPS 导航软件，
+以及交通事故通知系统。</p>
+<p>在离开 Networks in Motion 公司之后，
+Josiah 加入了 Google 公司，
+之后他又到了 Adly 公司工作，
+并开始学习和使用 Redis 来构建内容定向广告系统（content-targeting advertising）和 Twitter 分析平台。
+几个月之后，
+Josiah 加入了 Redis 邮件列表，
+并在那里回答了数百个关于使用和配置 Redis 的问题。
+在离开 Adly 公司并成为 ChowNow 公司的首席架构师兼联合创始人之后不久，
+Josiah 开始创作这本《Redis 实战》。</p>
+<p>要了解关于《Redis 实战》作者 Josiah Carlson 博士的更多信息，
+请访问他的 <a class="reference external" href="https://twitter.com/dr_josiah">twitter</a> 、 <a class="reference external" href="http://www.dr-josiah.com/">博客</a> 或者 <a class="reference external" href="https://github.com/josiahcarlson">github</a> 。</p>
+</div>
+<div class="section" id="id7">
+<h2>译者简介<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>黄健宏（huangz）在 2011 年开始接触 Redis 以来就一直在学习和研究 Redis ，
+他从 Redis 2.4 开始阅读并追踪 Redis 的源码，
+对 <a class="reference external" href="https://github.com/huangz1990/annotated_redis_source">Redis 2.6</a> 以及 <a class="reference external" href="https://github.com/huangz1990/redis-3.0-annotated">Redis 3.0</a> 的源码进行了详细的注释，
+并通过分析源码创作了<a class="reference external" href="http://redisbook.com">《Redis 设计与实现》</a>一书。</p>
+<p>除此之外，
+黄健宏还是 Redis 中文文档<a class="reference external" href="http://RedisDoc.com">《Redis 命令参考》</a>的译者，
+以及<a class="reference external" href="http://www.chinahadoop.cn/course/53">《Redis 从入门到精通》课程</a>的讲师。</p>
+<p>要了解关于《Redis 实战》译者黄健宏（huangz）的更多信息，
+请访问他的个人主页 <a class="reference external" href="http://huangz.me">huangz.me</a> 。</p>
+</div>
+<div class="section" id="id11">
+<h2>相关资源<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h2>
+<p>《Redis in Action》在 Manning 出版社的介绍页面：
+<a class="reference external" href="http://www.manning.com/carlson/">http://www.manning.com/carlson/</a></p>
+<p>《Redis in Action》书中的源码示例：
+<a class="reference external" href="https://github.com/josiahcarlson/redis-in-action">https://github.com/josiahcarlson/redis-in-action</a></p>
+<p>《Redis in Action》在
+<a class="reference external" href="http://www.amazon.cn/Redis-in-Action-Carlson-Josiah-L/dp/1617290858">亚马逊</a> 、
+<a class="reference external" href="http://www.amazon.com/Redis-Action-Josiah-L-Carlson/dp/1617290858">amazon.com</a>
+以及
+<a class="reference external" href="http://book.douban.com/subject/10597898/">豆瓣</a>
+的页面。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li><a href="#">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>
