@@ -20,12 +20,11 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
 
 《Redis 实战》是《Redis in Action》一书的简体中文翻译版，
 译者为黄健宏（huangz）。
-**书本目前的翻译工作已经基本完成，
-正在进行后续的编辑加工，**
-所有工作完成之后将由人民邮电出版社出版。
+**书本目前的翻译工作已经完成，
+正在进行后续的排版和检查，
+预计9月份就会印刷并出版。**
 
 要了解本书的最新消息，
-以及目前的翻译进度，
 请定期访问本网站，
 或者关注译者的\ `微博 <http://weibo.com/huangz1990>`_\ 、\ `豆瓣 <http://www.douban.com/people/i_m_huangz/>`_\ 、\ `twitter <https://twitter.com/huangz1990>`_\ 。
 
