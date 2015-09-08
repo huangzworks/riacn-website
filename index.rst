@@ -169,6 +169,9 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
 作者简介
 ------------
 
+.. image:: author.jpeg
+   :align: left
+
 在大学毕业之后，
 Josiah Carlson 博士继续在加州大学欧文分校学习理论计算机科学。
 在学习之余，
@@ -198,6 +201,9 @@ Josiah 开始创作这本《Redis 实战》。
 
 译者简介
 ------------
+
+.. image:: translator.jpg
+   :align: left
 
 黄健宏（huangz）在 2011 年开始接触 Redis 以来就一直在学习和研究 Redis ，
 他从 Redis 2.4 开始阅读并追踪 Redis 的源码，
