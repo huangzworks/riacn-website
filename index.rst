@@ -161,6 +161,11 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
   - 数据源
   - Redis 经验分享和相关文章
 
+.. toctree::
+   :maxdepth: 2
+
+   preview/appendx-a
+   preview/appendx-b 
 
 作者简介
 ------------
