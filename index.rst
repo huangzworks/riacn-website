@@ -32,21 +32,17 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
 目录
 ------------------
 
-- 序
-
-- 前言
-
-- 致谢
-
-- 关于本书
-
-  - 内容编排
-  - 代码
-  - 作者在线论坛
-
-- 关于作者
-
-- 关于封面插图
+.. toctree::
+   :maxdepth: 1
+   
+   preview/summary 
+   preview/translator-foreword
+   preview/foreword
+   preview/preface
+   preview/acknowledgments
+   preview/about-this-book
+   preview/about-the-cover
+   preview/about-the-translator
 
 **第一部分：基础知识**
 
