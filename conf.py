@@ -44,7 +44,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Redis 实战'
-copyright = u'2014, 黄健宏（huangz）'
+copyright = u'2015, 黄健宏（huangz）'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
