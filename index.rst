@@ -49,18 +49,9 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
 .. toctree::
    :maxdepth: 2
 
-   preview/chp1
-   preview/chp2
-   preview/chp3
-
-- 第2章 使用Redis构建Web应用
-  
-  - 2.1 登录和cookie缓存
-  - 2.2 使用Redis实现购物车
-  - 2.3 网页缓存
-  - 2.4 数据行缓存
-  - 2.5 网页分析
-  - 2.6 小结
+   preview/chapter1
+   preview/chapter2
+   preview/chapter3
 
 **第二部分：核心概念**
 
@@ -144,21 +135,7 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
   - 11.4 使用 Lua 对列表进行分片
   - 11.5 小结
 
-- 附录 A 快速安装指南
-  
-  - 在 Debian Linux 或者 Ubuntu Linux 上面安装 Redis 的方法
-  - 在 OS X 上面安装 Redis 的方法
-  - 在 Windows 上安装 Redis 的方法
-  - 小试 Redis
-
-- 附录 B 其他资源和参考资料
-
-  - 提供帮助的论坛
-  - 入门议题
-  - 队列函数库以及一些其他用途的函数库
-  - 数据可视化和数据记录
-  - 数据源
-  - Redis 经验分享和相关文章
+**第四部分：附录**
 
 .. toctree::
    :maxdepth: 2
