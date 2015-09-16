@@ -46,6 +46,13 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
 
 **第一部分：基础知识**
 
+.. toctree::
+   :maxdepth: 2
+
+   preview/chp1
+   preview/chp2
+   preview/chp3
+
 - 第1章 初识Redis
 
   - 1.1 Redis简介
