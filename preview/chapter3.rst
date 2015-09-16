@@ -63,6 +63,24 @@
 
 代码清单3-1   这个交互示例展示了Redis的\ ``INCR``\ 操作和\ ``DECR``\ 操作
 
+::
+
+    >>> conn = redis.Redis()
+    >>> conn.get('key')             # 尝试获取一个不存在的键将得到一个None值，终端不会显示这个值。
+    >>> conn.incr('key')            # 我们既可以对不存在的键执行自增操作，
+    1                               # 也可以通过可选的参数来指定自增操作的增量。
+    >>> conn.incr('key', 15)        #
+    16                              #
+    >>> conn.decr('key', 5)         # 和自增操作一样，
+    11                              # 执行自减操作的函数也可以通过可选的参数来指定减量。
+    >>> conn.get('key')             # 在尝试获取一个键的时候，命令以字符串格式返回被存储的整数。
+    '11'                            #
+    >>> conn.set('key', '13')       # 即使在设置键时输入的值为字符串，
+    True                            # 但只要这个值可以被解释为整数，
+    >>> conn.incr('key')            # 我们就可以把它当作整数来处理。
+    14                              #
+
+
 ----
 
 在读完本书其他章节之后，读者可能会发现本书只调用了\ ``incr()``\ ，这是因为Python的Redis库在内部使用\ ``INCRBY``\ 命令来实现\ ``incr()``\ 方法，并且这个方法的第二个参数是可选的：如果用户没有为这个可选参数设置值，那么这个参数就会使用默认值1。在编写本书的时候，Python的Redis客户端库支持Redis 2.6的所有命令，这个库通过\ ``incrbyfloat()``\ 方法来实现\ ``INCRBYFLOAT``\ 命令，并且\ ``incrbyfloat()``\ 方法也有类似于\ ``incr()``\ 方法的可选参数特性。
@@ -103,6 +121,32 @@
 ----
 
 代码清单3-2   这个交互示例展示了Redis的子串操作和二进制位操作
+
+::
+
+    >>> conn.append('new-string-key', 'hello ')     # 将字符串'hello'追加到目前并不存在的'new-string-key'键里。
+    6L                                              # APPEND命令在执行之后会返回字符串当前的长度。
+    >>> conn.append('new-string-key', 'world!')
+    12L                                             #
+    >>> conn.substr('new-string-key', 3, 7)         # Redis的索引以0为开始，在进行范围访问时，范围的终点（endpoint）默认也包含在这个范围之内。
+    'lo wo'                                         # 字符串'lo wo'位于字符串'hello world!'的中间。
+    >>> conn.setrange('new-string-key', 0, 'H')     # 对字符串执行范围设置操作。
+    12                                              # SETRANGE命令在执行之后同样会返回字符串的当前总长度。
+    >>> conn.setrange('new-string-key', 6, 'W')
+    12
+    >>> conn.get('new-string-key')                  # 查看字符串的当前值。
+    'Hello World!'                                  # 前面执行的两个SETRANGE命令成功地将字母h和w从原来的小写改成了大写。
+    >>> conn.setrange('new-string-key', 11, ', how are you?')   # SETRANGE命令既可以用于替换字符串里已有的内容，又可以用于增长字符串。
+    25
+    >>> conn.get('new-string-key')
+    'Hello World, how are you?'                     # 前面执行的SETRANGE命令移除了字符串末尾的感叹号，并将更多字符追加到了字符串末尾。
+    >>> conn.setbit('another-key', 2, 1)            # 对超出字符串长度的二进制位进行设置时，超出的部分会被填充为空字节。
+    0                                               # SETBIT命令会返回二进制位被设置之前的值。
+    >>> conn.setbit('another-key', 7, 1)            # 在对Redis存储的二进制位进行解释（interpret）时，
+    0                                               # 请记住Redis存储的二进制位是按照偏移量从高到低排列的。
+    >>> conn.get('another-key')                     #
+    '!'                                             # 通过将第2个二进制位以及第7个二进制位的值设置为1，键的值将变为‘!’，即字符33 。
+
 
 ----
 
@@ -147,6 +191,31 @@
 
 代码清单3-3   这个交互示例展示了Redis列表的推入操作和弹出操作
 
+::
+
+    >>> conn.rpush('list-key', 'last')          # 在向列表推入元素时，
+    1L                                          # 推入操作执行完毕之后会返回列表当前的长度。
+    >>> conn.lpush('list-key', 'first')         # 可以很容易地对列表的两端执行推入操作。
+    2L
+    >>> conn.rpush('list-key', 'new last')
+    3L
+    >>> conn.lrange('list-key', 0, -1)          # 从语义上来说，列表的左端为开头，右端为结尾。
+    ['first', 'last', 'new last']               #
+    >>> conn.lpop('list-key')                   # 通过重复地弹出列表左端的元素，
+    'first'                                     # 可以按照从左到右的顺序来获取列表中的元素。
+    >>> conn.lpop('list-key')                   #
+    'last'                                      #
+    >>> conn.lrange('list-key', 0, -1)
+    ['new last']
+    >>> conn.rpush('list-key', 'a', 'b', 'c')   # 可以同时推入多个元素。
+    4L
+    >>> conn.lrange('list-key', 0, -1)
+    ['new last', 'a', 'b', 'c']
+    >>> conn.ltrim('list-key', 2, -1)           # 可以从列表的左端、右端或者左右两端删减任意数量的元素。
+    True                                        #
+    >>> conn.lrange('list-key', 0, -1)          #
+    ['b', 'c']                                  #
+
 -----
 
 这个示例里的\ ``LTRIM``\ 命令是新的，组合使用\ ``LTRIM``\ 和\ ``LRANGE``\ 可以构建出一个在功能上类似于\ ``LPOP``\ 或者\ ``RPOP``\ 的操作，它能够一次返回并弹出多个元素。本章稍后将会介绍原子地\ [#f1]_\ 执行多个命令的方法，而更高级的Redis事务特性则会在第4章介绍。
@@ -178,6 +247,31 @@
 ----
 
 代码清单3-4   这个交互示例展示了Redis列表的阻塞弹出命令以及元素移动命令
+
+::
+
+    >>> conn.rpush('list', 'item1')             # 将一些元素添加到两个列表里面。
+    1                                           #
+    >>> conn.rpush('list', 'item2')             #
+    2                                           #
+    >>> conn.rpush('list2', 'item3')            #
+    1                                           #
+    >>> conn.brpoplpush('list2', 'list', 1)     # 将一个元素从一个列表移动到另一个列表，
+    'item3'                                     # 并返回被移动的元素。
+    >>> conn.brpoplpush('list2', 'list', 1)     # 当列表不包含任何元素时，阻塞弹出操作会在给定的时限内等待可弹出的元素出现，并在时限到达后返回None（交互终端不会打印这个值）。
+    >>> conn.lrange('list', 0, -1)              # 弹出“list2”最右端的元素，
+    ['item3', 'item1', 'item2']                 # 并将弹出的元素推入到“list”的左端。
+    >>> conn.brpoplpush('list', 'list2', 1)
+    'item2'
+    >>> conn.blpop(['list', 'list2'], 1)        # BLPOP命令会从左到右地检查传入的列表，
+    ('list', 'item3')                           # 并对最先遇到的非空列表执行弹出操作。
+    >>> conn.blpop(['list', 'list2'], 1)        #
+    ('list', 'item1')                           #
+    >>> conn.blpop(['list', 'list2'], 1)        #
+    ('list2', 'item2')                          #
+    >>> conn.blpop(['list', 'list2'], 1)        #
+    >>>
+
 
 -----
 
@@ -234,6 +328,25 @@ Redis的集合以无序的方式来存储多个各不相同的元素，用户可
 
 代码清单3-5   这个交互示例展示了Redis中的一些常用的集合命令
 
+::
+
+    >>> conn.sadd('set-key', 'a', 'b', 'c')         # SADD命令会将那些目前并不存在于集合里面的元素添加到集合里面，
+    3                                               # 并返回被添加元素的数量。
+    >>> conn.srem('set-key', 'c', 'd')              # srem函数在元素被成功移除时返回True，
+    True                                            # 移除失败时返回False；
+    >>> conn.srem('set-key', 'c', 'd')              # 注意这是Python客户端的一个bug，
+    False                                           # 实际上Redis的SREM命令返回的是被移除元素的数量，而不是布尔值。
+    >>> conn.scard('set-key')                       # 查看集合包含的元素数量。
+    2                                               #
+    >>> conn.smembers('set-key')                    # 获取集合包含的所有元素。
+    set(['a', 'b'])                                 #
+    >>> conn.smove('set-key', 'set-key2', 'a')      # 可以很容易地将元素从一个集合移动到另一个集合。
+    True                                            #
+    >>> conn.smove('set-key', 'set-key2', 'c')      # 在执行SMOVE命令时，
+    False                                           # 如果用户想要移动的元素不存在于第一个集合里，
+    >>> conn.smembers('set-key2')                   # 那么移动操作就不会执行。
+    set(['a'])                                      #
+
 ----
 
 通过使用上面展示的命令可以将各不相同的多个元素添加到集合里面，比如第1章就使用集合记录了文章已投票用户名单，以及文章属于哪个群组。但集合真正厉害的地方在于组合和关联多个集合，表3-6展示了相关的命令。
@@ -265,6 +378,19 @@ Redis的集合以无序的方式来存储多个各不相同的元素，用户可
 ----
 
 代码清单3-6  这个交互示例展示了Redis的差集运算、交集运算以及并集运算
+
+::
+
+    >>> conn.sadd('skey1', 'a', 'b', 'c', 'd')  # 首先将一些元素添加到两个集合里面。
+    4                                           #
+    >>> conn.sadd('skey2', 'c', 'd', 'e', 'f')  #
+    4                                           #
+    >>> conn.sdiff('skey1', 'skey2')            # 计算从第一个集合中移除第二个集合所有元素之后的结果。
+    set(['a', 'b'])                             #
+    >>> conn.sinter('skey1', 'skey2')           # 还可以找出同时存在于两个集合中的元素。
+    set(['c', 'd'])                             #
+    >>> conn.sunion('skey1', 'skey2')           # 可以找出两个结合中的所有元素。
+    set(['a', 'c', 'b', 'e', 'd', 'f'])         #
 
 ----
 
@@ -303,6 +429,17 @@ Redis的集合以无序的方式来存储多个各不相同的元素，用户可
 
 代码清单3-7   这个交互示例展示了Redis中的一些常用的散列命令
 
+::
+
+    >>> conn.hmset('hash-key', {'k1':'v1', 'k2':'v2', 'k3':'v3'})   # 使用HMSET命令可以一次将多个键值对添加到散列里面。
+    True                                                            #
+    >>> conn.hmget('hash-key', ['k2', 'k3'])                        #  使用HMGET命令可以一次获取多个键的值。
+    ['v2', 'v3']                                                    #
+    >>> conn.hlen('hash-key')                                       # HLEN命令通常用于调试一个包含非常多键值对的散列。
+    3                                                               #
+    >>> conn.hdel('hash-key', 'k1', 'k3')                           # HDEL命令在成功地移除了至少一个键值对时返回True，
+    True                                                            # 因为HDEL命令已经可以同时删除多个键值对了，所以Redis没有实现HMDEL命令。
+
 ----
 
 第1章介绍的\ ``HGET``\ 命令和\ ``HSET``\ 命令分别是\ ``HMGET``\ 命令和\ ``HMSET``\ 命令的单参数版本，这些命令的唯一区别在于单参数版本每次执行只能处理一个键值对，而多参数版本每次执行可以处理多个键值对。
@@ -338,6 +475,20 @@ Redis的集合以无序的方式来存储多个各不相同的元素，用户可
 ----
 
 代码清单3-8   这个交互示例展示了Redis散列的一些更高级的特性
+
+::
+
+    >>> conn.hmset('hash-key2', {'short':'hello', 'long':1000*'1'}) # 在考察散列的时候，我们可以只取出散列包含的键，而不必传输大的键值。
+    True                                                            #
+    >>> conn.hkeys('hash-key2')                                     #
+    ['long', 'short']                                               #
+    >>> conn.hexists('hash-key2', 'num')                            # 检查给定的键是否存在于散列中。
+    False                                                           #
+    >>> conn.hincrby('hash-key2', 'num')                            # 和字符串一样，
+    1L                                                              # 对散列中一个尚未存在的键执行自增操作时，
+    >>> conn.hexists('hash-key2', 'num')                            # Redis会将键的值当作0来处理。
+    True                                                            #
+
 
 ----
 
@@ -386,6 +537,26 @@ Redis的集合以无序的方式来存储多个各不相同的元素，用户可
 
 代码清单3-9  这个交互示例展示了Redis中的一些常用的有序集合命令
 
+::
+
+    >>> conn.zadd('zset-key', 'a', 3, 'b', 2, 'c', 1)   # 在Python客户端执行ZADD命令需要先输入成员、后输入分值，
+    3                                                   # 这跟Redis标准的先输入分值、后输入成员的做法正好相反。
+    >>> conn.zcard('zset-key')                          # 取得有序集合的大小可以让我们在某些情况下知道是否需要对有序集合进行修剪。
+    3                                                   #
+    >>> conn.zincrby('zset-key', 'c', 3)                # 跟字符串和散列一样，
+    4.0                                                 # 有序集合的成员也可以执行自增操作。
+    >>> conn.zscore('zset-key', 'b')                    # 获取单个成员的分值对于实现计数器或者排行榜之类的功能非常有用。
+    2.0                                                 #
+    >>> conn.zrank('zset-key', 'c')                     # 获取指定成员的排名（排名以0为开始），
+    2                                                   # 之后可以根据这个排名来决定ZRANGE的访问范围。
+    >>> conn.zcount('zset-key', 0, 3)                   # 对于某些任务来说，
+    2L                                                  # 统计给定分值范围内的元素数量非常有用。
+    >>> conn.zrem('zset-key', 'b')                      # 从有序集合里面移除成员和添加成员一样容易。
+    True                                                #
+    >>> conn.zrange('zset-key', 0, -1, withscores=True) # 在进行调试时，我们通常会使用ZRANGE取出有序集合里包含的所有元素，
+    [('a', 3.0), ('c', 4.0)]                            # 但是在实际用例中，通常一次只会取出一小部分元素。
+
+
 ----
 
 因为\ ``ZADD``\ 、\ ``ZREM``\ 、\ ``ZINCRBY``\ 、\ ``ZSCORE``\ 和\ ``ZRANGE``\ 都已经在第1章和第2章介绍过了，所以读者应该不会对它们感到陌生。\ ``ZCOUNT``\ 命令和其他命令不太相同，它主要用于计算分值在给定范围内的成员数量。
@@ -423,6 +594,28 @@ Redis的集合以无序的方式来存储多个各不相同的元素，用户可
 ----
 
 代码清单3-10  这个交互示例展示了\ ``ZINTERSTORE``\ 命令和\ ``ZUNIONSTORE``\ 命令的用法
+
+::
+
+    >>> conn.zadd('zset-1', 'a', 1, 'b', 2, 'c', 3)                         # 首先创建两个有序集合。
+    3                                                                       #
+    >>> conn.zadd('zset-2', 'b', 4, 'c', 1, 'd', 0)                         #
+    3                                                                       #
+    >>> conn.zinterstore('zset-i', ['zset-1', 'zset-2'])                    # 因为ZINTERSTORE和ZUNIONSTORE默认使用的聚合函数为sum，
+    2L                                                                      # 所以多个有序集合里成员的分值将被加起来。
+    >>> conn.zrange('zset-i', 0, -1, withscores=True)                       #
+    [('c', 4.0), ('b', 6.0)]                                                #
+    >>> conn.zunionstore('zset-u', ['zset-1', 'zset-2'], aggregate='min')   # 用户可以在执行并集运算和交集运算的时候传入不同的聚合函数，
+    4L                                                                      # 共有 sum、min、max 三个聚合函数可选。
+    >>> conn.zrange('zset-u', 0, -1, withscores=True)                       #
+    [('d', 0.0), ('a', 1.0), ('c', 1.0), ('b', 2.0)]                        #
+    >>> conn.sadd('set-1', 'a', 'd')                                        # 用户还可以把集合作为输入传给ZINTERSTORE和ZUNIONSTORE，
+    2                                                                       # 命令会将集合看作是成员分值全为1的有序集合来处理。
+    >>> conn.zunionstore('zset-u2', ['zset-1', 'zset-2', 'set-1'])          #
+    4L                                                                      #
+    >>> conn.zrange('zset-u2', 0, -1, withscores=True)                      #
+    [('d', 1.0), ('a', 2.0), ('c', 4.0), ('b', 6.0)]                        #
+
 
 ----
 
@@ -489,6 +682,49 @@ Redis的集合以无序的方式来存储多个各不相同的元素，用户可
 
 代码清单3-11  这个交互示例展示了如何使用Redis中的\ ``PUBLISH``\ 命令以及\ ``SUBSCRIBE``\ 命令
 
+::
+
+    >>> def publisher(n):
+    ...     time.sleep(1)                                                   # 函数在刚开始执行时会先休眠，让订阅者有足够的时间来连接服务器并监听消息。
+    ...     for i in xrange(n):
+    ...         conn.publish('channel', i)                                  # 在发布消息之后进行短暂的休眠，
+    ...         time.sleep(1)                                               # 让消息可以一条接一条地出现。
+    ...
+    >>> def run_pubsub():
+    ...     threading.Thread(target=publisher, args=(3,)).start()
+    ...     pubsub = conn.pubsub()
+    ...     pubsub.subscribe(['channel'])
+    ...     count = 0
+    ...     for item in pubsub.listen():
+    ...         print item
+    ...         count += 1
+    ...         if count == 4:
+    ...             pubsub.unsubscribe()
+    ...         if count == 5:
+    ...             break
+    ... 
+
+    >>> def run_pubsub():
+    ...     threading.Thread(target=publisher, args=(3,)).start()           # 启动发送者线程发送三条消息。
+    ...     pubsub = conn.pubsub()                                          # 创建发布与订阅对象，并让它订阅给定的频道。
+    ...     pubsub.subscribe(['channel'])                                   #
+    ...     count = 0
+    ...     for item in pubsub.listen():                                    # 通过遍历pubsub.listen()函数的执行结果来监听订阅消息。
+    ...         print item                                                  # 打印接收到的每条消息。
+    ...         count += 1                                                  # 在接收到一条订阅反馈消息和三条发布者发送的消息之后，
+    ...         if count == 4:                                              # 执行退订操作，停止监听新消息。
+    ...             pubsub.unsubscribe()                                    #
+    ...         if count == 5:                                              # 当客户端接收到退订反馈消息时，
+    ...             break                                                   # 需要停止接收消息。
+    ...
+    >>> run_pubsub()                                                        # 实际运行函数并观察它们的行为。
+    {'pattern': None, 'type': 'subscribe', 'channel': 'channel', 'data': 1L}# 在刚开始订阅一个频道的时候，客户端会接收到一条关于被订阅频道的反馈消息。
+    {'pattern': None, 'type': 'message', 'channel': 'channel', 'data': '0'} # 这些结构就是我们在遍历pubsub.listen()函数时得到的元素。
+    {'pattern': None, 'type': 'message', 'channel': 'channel', 'data': '1'} #
+    {'pattern': None, 'type': 'message', 'channel': 'channel', 'data': '2'} #
+    {'pattern': None, 'type': 'unsubscribe', 'channel': 'channel', 'data':  # 在退订频道时，客户端会接收到一条反馈消息，
+    0L}                                                                     # 告知被退订的是哪个频道，以及客户端目前仍在订阅的频道数量。
+
 ----
 
 虽然Redis的发布与订阅模式非常有用，但本书只在这一节和第8.5节使用了这个模式，这样做的原因有以下两个。
@@ -536,6 +772,28 @@ Redis的排序操作和其他编程语言的排序操作一样，都可以根据
 
 代码清单3-12  这个交互示例展示了\ ``SORT``\ 命令的一些简单的用法
 
+::
+
+    >>> conn.rpush('sort-input', 23, 15, 110, 7)                    # 首先将一些元素添加到列表里面。
+    4                                                               #
+    >>> conn.sort('sort-input')                                     # 根据数字大小对元素进行排序。
+    ['7', '15', '23', '110']                                        #
+    >>> conn.sort('sort-input', alpha=True)                         # 根据字母表顺序对元素进行排序。
+    ['110', '15', '23', '7']                                        #
+    >>> conn.hset('d-7', 'field', 5)                                # 添加一些用于执行排序操作和获取操作的附加数据。
+    1L                                                              #
+    >>> conn.hset('d-15', 'field', 1)                               #
+    1L                                                              #
+    >>> conn.hset('d-23', 'field', 9)                               #
+    1L                                                              #
+    >>> conn.hset('d-110', 'field', 3)                              #
+    1L                                                              #
+    >>> conn.sort('sort-input', by='d-*->field')                    # 将散列的域（field）用作权重，对sort-input列表进行排序。
+    ['15', '110', '7', '23']                                        #
+    >>> conn.sort('sort-input', by='d-*->field', get='d-*->field')  # 获取外部数据作为返回值，而不返回被排序的元素。
+    ['1', '3', '5', '9']                                            #
+
+
 ----
 
 ``SORT``\ 命令不仅可以对列表进行排序，还可以对集合进行排序，然后返回一个列表形式的排序结果。代码清单3-12除了展示如何使用\ ``alpha``\ 关键字参数对元素进行字符串排序之外，还展示了如何基于外部数据对元素进行排序，以及如何获取并返回外部数据。本书的第7章将介绍如何组合使用集合操作和\ ``SORT``\ 命令：当集合结构计算交集、并集和差集的能力，与\ ``SORT``\ 命令获取散列存储的外部数据的能力相结合时，\ ``SORT``\ 命令将变得非常强大。
@@ -562,6 +820,22 @@ Redis的基本事务（basic transaction）需要用到\ ``MULTI``\ 命令和\ `
 
 代码清单3-13  在并行执行命令时，缺少事务可能会引发的问题
 
+::
+
+    >>> def notrans():
+    ...     print conn.incr('notrans:')                     # 对‘notrans:’计数器执行自增操作并打印操作的执行结果。
+    ...     time.sleep(.1)                                  # 等待100毫秒。
+    ...     conn.incr('notrans:', -1)                       # 对‘notrans:’计数器执行自减操作。
+    ...
+    >>> if 1:
+    ...     for i in xrange(3):                             # 启动三个线程来执行没有被事务包裹的自增、休眠和自减操作。
+    ...         threading.Thread(target=notrans).start()    #
+    ...     time.sleep(.5)                                  # 等待500毫秒，让操作有足够的时间完成。
+    ...
+    1                                                       # 因为没有使用事务，
+    2                                                       # 所以三个线程执行的各个命令会互相交错，
+    3                                                       # 使得计数器的值持续地增大。
+
 ----
 
 因为没有使用事务，所以三个线程都可以在执行自减操作之前，对\ ``notrans:``\ 计数器执行自增操作。代码清单里面通过休眠100毫秒的方式来放大了潜在的问题，但如果我们确实需要在不受其他命令干扰的情况下，对计数器执行自增操作和自减操作，那么我们就不得不解决这个潜在的问题。代码清单3-14展示了如何使用事务来执行这些相同的操作。
@@ -569,6 +843,24 @@ Redis的基本事务（basic transaction）需要用到\ ``MULTI``\ 命令和\ `
 ----
 
 代码清单3-14  使用事务来处理命令的并行执行问题
+
+::
+
+    >>> def trans():
+    ...     pipeline = conn.pipeline()                      # 创建一个事务型（transactional）流水线对象。
+    ...     pipeline.incr('trans:')                         # 把针对‘trans:’计数器的自增操作放入队列。
+    ...     time.sleep(.1)                                  # 等待100毫秒。
+    ...     pipeline.incr('trans:', -1)                     # 把针对‘trans:’计数器的自减操作放入队列。
+    ...     print pipeline.execute()[0]                     # 执行事务包含的命令并打印自增操作的执行结果。
+    ...
+    >>> if 1:
+    ...     for i in xrange(3):                             # 启动三个线程来执行被事务包裹的自增、休眠和自减三个操作。
+    ...         threading.Thread(target=trans).start()      #
+    ...     time.sleep(.5)                                  # 等待500毫秒，让操作有足够的时间完成。
+    ...
+    1                                                       # 因为每组自增、休眠和自减操作都在事务里面执行，
+    1                                                       # 所以命令之间不会互相交错，
+    1                                                       # 因此所有事务的执行结果都是1。
 
 ----
 
@@ -627,6 +919,22 @@ Redis的基本事务（basic transaction）需要用到\ ``MULTI``\ 命令和\ `
 ----
 
 代码清单3-15  展示Redis中过期时间相关的命令的使用
+
+::
+
+    >>> conn.set('key', 'value')                    # 设置一个简单的字符串值，作为过期时间的设置对象。
+    True                                            #
+    >>> conn.get('key')                             #
+    'value'                                         #
+    >>> conn.expire('key', 2)                       # 如果我们为键设置了过期时间，那么当键过期后，
+    True                                            # 我们再尝试去获取键时，会发现键已经被删除了。
+    >>> time.sleep(2)                               #
+    >>> conn.get('key')                             #
+    >>> conn.set('key', 'value2')
+    True
+    >>> conn.expire('key', 100); conn.ttl('key')    # 还可以很容易地查到键距离过期时间还有多久。
+    True                                            #
+    100                                             #
 
 ----
 
