@@ -8,7 +8,6 @@ Redis 实战
 
 .. image:: ria-cover.png
    :align: left
-   :scale: 23
 
 《Redis in Action》是由 Josiah Carlson 博士编写，
 Manning 出版社出版的一本关于 Redis 应用方面的书籍，
