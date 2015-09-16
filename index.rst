@@ -53,14 +53,6 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
    preview/chp2
    preview/chp3
 
-- 第1章 初识Redis
-
-  - 1.1 Redis简介
-  - 1.2 Redis数据结构简介
-  - 1.3 Redis，你好！
-  - 1.4 寻求帮助
-  - 1.5 小结
-
 - 第2章 使用Redis构建Web应用
   
   - 2.1 登录和cookie缓存
