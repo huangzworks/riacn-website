@@ -51,20 +51,13 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
 
    preview/chapter1
    preview/chapter2
-   preview/chapter3
 
 **第二部分：核心概念**
 
-- 第3章 Redis命令
+.. toctree::
+   :maxdepth: 2
 
-  - 3.1 字符串
-  - 3.2 列表
-  - 3.3 集合
-  - 3.4 散列
-  - 3.5 有序集合
-  - 3.6 发布与订阅
-  - 3.7 其他命令
-  - 3.8 小结
+   preview/chapter3
 
 - 第 4 章 数据安全与性能保障
 
