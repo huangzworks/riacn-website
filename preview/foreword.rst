@@ -19,4 +19,4 @@ Redis始于实用主义——它是一个程序员因为找不到合适的工具
 
 综上所述，《Redis实战》将是一本把读者带入Redis世界、向读者指明正确方向从而避免常见陷阱的书。我认为《Redis实战》对于Redis的生态系统非常有帮助，Redis的用户应该都会喜欢这本书。
 
-——Salvatore Sanfilippo，Redis的作者
+——Redis之父，Salvatore Sanfilippo
