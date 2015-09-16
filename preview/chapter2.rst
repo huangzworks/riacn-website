@@ -69,6 +69,12 @@
 
 代码清单2-1  ``check_token()``\ 函数
 
+::
+
+    def check_token(conn, token):
+        return conn.hget('login:', token)   # 尝试获取并返回令牌对应的用户。
+
+
 ----
 
 对令牌进行检查并不困难，因为大部分复杂的工作都是在更新令牌时完成的：用户每次浏览页面的时候，程序都会对用户存储在登录散列里面的信息进行更新，并将用户的令牌和当前时间戳添加到记录最近登录用户的有序集合里面；如果用户正在浏览的是一个商品页面，那么程序还会将这个商品添加到记录这个用户最近浏览过的商品的有序集合里面，并在被记录商品的数量超过25个时，对这个有序集合进行修剪。代码清单2-2展示了程序更新令牌的方法。
@@ -76,6 +82,22 @@
 ----
 
 代码清单2-2  ``update_token()``\ 函数
+
+::
+
+    def update_token(conn, token, user, item=None):
+        # 获取当前时间戳。
+        timestamp = time.time()
+        # 维持令牌与已登录用户之间的映射。
+        conn.hset('login:', token, user)
+        # 记录令牌最后一次出现的时间。
+        conn.zadd('recent:', token, timestamp)
+        if item:
+            # 记录用户浏览过的商品。
+            conn.zadd('viewed:' + token, item, timestamp)
+            # 移除旧的记录，只保留用户最近浏览过的25个商品。
+            conn.zremrangebyrank('viewed:' + token, 0, -26)
+
 
 ----
 
@@ -86,6 +108,35 @@
 ----
 
 代码清单2-3  ``clean_sessions()``\ 函数
+
+::
+
+    QUIT = False
+    LIMIT = 10000000
+
+    def clean_sessions(conn):
+        while not QUIT:
+            # 找出目前已有令牌的数量。
+            size = conn.zcard('recent:')
+            # 令牌数量未超过限制，休眠并在之后重新检查。
+            if size <= LIMIT:
+                time.sleep(1)
+                continue
+
+            #  获取需要移除的令牌ID。
+            end_index = min(size - LIMIT, 100)
+            tokens = conn.zrange('recent:', 0, end_index-1)
+
+            # 为那些将要被删除的令牌构建键名。
+            session_keys = []
+            for token in tokens:
+                session_keys.append('viewed:' + token)
+
+            # 移除最旧的那些令牌。
+            conn.delete(*session_keys)
+            conn.hdel('login:', *tokens)
+            conn.zrem('recent:', *tokens)
+   
 
 ----
 
@@ -122,6 +173,17 @@
 
 代码清单2-4  ``add_to_cart()``\ 函数
 
+::
+
+    def add_to_cart(conn, session, item, count):
+        if count <= 0:
+            # 从购物车里面移除指定的商品。
+            conn.hrem('cart:' + session, item) 
+        else:
+            # 将指定的商品添加到购物车。
+            conn.hset('cart:' + session, item, count) 
+
+
 ----
 
 接着，我们需要对之前的会话清理函数进行更新，让它在清理旧会话的同时，将旧会话对应用户的购物车也一并删除，更新后的函数如代码清单2-5所示。
@@ -129,6 +191,28 @@
 ----
 
 代码清单2-5  ``clean_full_sessions()``\ 函数
+
+::
+
+    def clean_full_sessions(conn):
+        while not QUIT:
+            size = conn.zcard('recent:')
+            if size <= LIMIT:
+                time.sleep(1)
+                continue
+
+            end_index = min(size - LIMIT, 100)
+            sessions = conn.zrange('recent:', 0, end_index-1)
+
+            session_keys = []
+            for sess in sessions:
+                session_keys.append('viewed:' + sess)
+                session_keys.append('cart:' + sess)   # 新增加的这行代码用于删除旧会话对应用户的购物车。
+
+            conn.delete(*session_keys)
+            conn.hdel('login:', *sessions)
+            conn.zrem('recent:', *sessions)
+
 
 ----
 
@@ -151,6 +235,28 @@
 ----
 
 代码清单2-6  ``cache_request()``\ 函数
+
+::
+
+    def cache_request(conn, request, callback):
+        # 对于不能被缓存的请求，直接调用回调函数。
+        if not can_cache(conn, request):
+            return callback(request)
+
+        # 将请求转换成一个简单的字符串键，方便之后进行查找。
+        page_key = 'cache:' + hash_request(request) 
+        # 尝试查找被缓存的页面。
+        content = conn.get(page_key)
+
+        if not content:
+            # 如果页面还没有被缓存，那么生成页面。
+            content = callback(request)
+            # 将新生成的页面放到缓存里面。
+            conn.setex(page_key, content, 300)
+
+        # 返回页面。
+        return content
+
 
 ----
 
@@ -191,6 +297,14 @@ Fake Web Retailer的商品页面通常只会从数据库里面载入一两行数
 
 代码清单2-7  ``schedule_row_cache()``\ 函数
 
+::
+
+    def schedule_row_cache(conn, row_id, delay):
+        # 先设置数据行的延迟值。
+        conn.zadd('delay:', row_id, delay) 
+        # 立即缓存数据行。
+        conn.zadd('schedule:', row_id, time.time()) 
+
 ----
 
 现在我们已经完成了调度部分，那么接下来如何缓存行呢？负责缓存数据行的函数会尝试读取调度有序集合的第一个元素以及该元素的分值，如果调度有序集合没有包含任何元素，或者分值存储的时间戳所指定的时间尚未来临，那么函数会先休眠50毫秒，然后再重新进行检查。当缓存函数发现一个需要立即进行更新的数据行时，缓存函数会检查这个数据行的延迟值：如果数据行的延迟值小于或者等于0，那么缓存函数会从延迟有序集合和调度有序集合里面移除这个数据行的ID，并从缓存里面删除这个数据行已有的缓存，然后再重新进行检查；对于延迟值大于0的数据行来说，缓存函数会从数据库里面取出这些行，将它们编码为JSON格式并存储到Redis里面，然后更新这些行的调度时间。执行以上工作的缓存函数如代码清单2-8所示。
@@ -198,6 +312,36 @@ Fake Web Retailer的商品页面通常只会从数据库里面载入一两行数
 ----
 
 代码清单2-8  守护进程函数\ ``cache_rows()``
+
+::
+
+    def cache_rows(conn):
+        while not QUIT:
+            # 尝试获取下一个需要被缓存的数据行以及该行的调度时间戳，
+            # 命令会返回一个包含零个或一个元组（tuple）的列表。
+            next = conn.zrange('schedule:', 0, 0, withscores=True) 
+            now = time.time()
+            if not next or next[0][1] > now:
+                # 暂时没有行需要被缓存，休眠50毫秒后重试。
+                time.sleep(.05) 
+                continue
+
+            row_id = next[0][0]
+            # 获取下一次调度前的延迟时间。
+            delay = conn.zscore('delay:', row_id)
+            if delay <= 0:
+                # 不必再缓存这个行，将它从缓存中移除。
+                conn.zrem('delay:', row_id) 
+                conn.zrem('schedule:', row_id)
+                conn.delete('inv:' + row_id)
+                continue
+
+            # 读取数据行。
+            row = Inventory.get(row_id)
+            # 更新调度时间并设置缓存值。
+            conn.zadd('schedule:', row_id, now + delay)         
+            conn.set('inv:' + row_id, json.dumps(row.to_dict())) 
+
 
 ----
 
@@ -218,6 +362,18 @@ Fake Web Retailer的商品页面通常只会从数据库里面载入一两行数
 
 代码清单 2-9  修改后的\ ``update_token()``\ 函数
 
+::
+
+    def update_token(conn, token, user, item=None):
+        timestamp = time.time()
+        conn.hset('login:', token, user)
+        conn.zadd('recent:', token, timestamp)
+        if item:
+            conn.zadd('viewed:' + token, item, timestamp)
+            conn.zremrangebyrank('viewed:' + token, 0, -26)
+            conn.zincrby('viewed:', item, -1)                   # 这行代码是新添加的。
+
+
 ----
 
 新添加的代码记录了所有商品的浏览次数，并根据浏览次数对商品进行了排序，被浏览得最多的商品将被放到有序集合的索引\ ``0``\ 位置上，并且具有整个有序集合最少的分值。随着时间的流逝，商品的浏览次数会呈现两极分化的状态，一些商品的浏览次数会越来越多，而另一些商品的浏览次数则会越来越少。除了缓存最常被浏览的商品之外，程序还需要发现那些变得越来越流行的新商品，并在合适的时候缓存它们。
@@ -228,6 +384,18 @@ Fake Web Retailer的商品页面通常只会从数据库里面载入一两行数
 
 代码清单2-10  守护进程函数\ ``rescale_viewed()``
 
+::
+
+    def rescale_viewed(conn):
+        while not QUIT:
+            # 删除所有排名在20 000名之后的商品。
+            conn.zremrangebyrank('viewed:', 0, -20001) 
+            # 将浏览次数降低为原来的一半
+            conn.zinterstore('viewed:', {'viewed:': .5}) 
+            # 5分钟之后再执行这个操作。
+            time.sleep(300) 
+
+
 ----
 
 通过记录商品的浏览次数，并定期对记录浏览次数的有序集合进行修剪和分值调整，我们为Fake Web Retailer建立起了一个持续更新的最常浏览商品排行榜。接下来要做的就是修改之前介绍过的\ ``can_cache()``\ 函数，让它使用新的方法来判断页面是否需要被缓存，如代码清单2-11所示。
@@ -235,6 +403,20 @@ Fake Web Retailer的商品页面通常只会从数据库里面载入一两行数
 ----
 
 代码清单2-11  ``can_cache()``\ 函数
+
+::
+
+    def can_cache(conn, request):
+        # 尝试从页面里面取出商品ID。
+        item_id = extract_item_id(request)
+        # 检查这个页面能否被缓存以及这个页面是否为商品页面。
+        if not item_id or is_dynamic(request):
+            return False
+        # 取得商品的浏览次数排名。
+        rank = conn.zrank('viewed:', item_id)
+        # 根据商品的浏览次数排名来判断是否需要缓存这个页面。
+        return rank is not None and rank < 10000 
+
 
 ----
 
