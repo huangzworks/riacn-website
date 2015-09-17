@@ -193,9 +193,9 @@ A.3.2  在Windows上安装Redis
 
 ----
 
-TODO
-
 图A-1  在Windows上运行Redis
+
+.. image:: image/A-1.png
 
 ----
 
