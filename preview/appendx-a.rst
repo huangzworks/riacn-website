@@ -288,6 +288,6 @@ A.4  你好Redis
 
 如果你在安装Redis或者Python的过程中遇到了困难，那么请到Maning的\ *Redis实战*\ 论坛上发布求助信息，或者查看已有的帖子，看看是否已经有人解决了你遇到的问题。
 
-.. rubric:: Footnotes
+----
 
 .. [#f1] 有经验的Python用户可能会问，为什么要安装\ ``setuptools``\ 而不是\ ``pip``\ 呢？（\ ``pip``\ 是另一个用于安装Python库的软件包。）这是因为\ ``pip``\ 进行简易下载（easy download）所需的\ ``virtualenv``\ 不在本书介绍的内容范围之内。
