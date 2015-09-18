@@ -9,39 +9,47 @@ Redis实战
 .. image:: ria-cover.png
    :align: left
 
-《Redis in Action》是由 Josiah Carlson 博士编写，
-Manning 出版社出版的一本关于 Redis 应用方面的书籍，
-该书深入浅出地介绍了 Redis 的五种数据类型，
-并通过多个实用例子展示了 Redis 的用法，
+欢迎来到《Redis实战》的支持网站！
+
+《Redis实战》是《Redis in Action》一书的中文翻译版，
+该书深入浅出地介绍了 Redis 的字符串、列表、散列、集合、有序集合等五种结构，
+并通过文章聚合网站、cookie、购物车、网页缓存、日志、计数器、IP 所属地址查询程序、自动补全、分布式锁、计数信号量、任务队列、消息队列、搜索程序、广告定向程序、社交网站等一系列实用示例展示了 Redis 的用法。
+
 除此之外，
-该书还讲述了 Redis 的优化方法以及扩展方法，
-是一本对于学习和使用 Redis 来说不可多得的参考书籍。
+《Redis实战》还介绍了使用短结构、分片、事务、流水线、复制、Lua 脚本等手段来扩展和优化 Redis 的方法，
+这些技术可以大幅地扩展系统的性能，
+并尽可能地降低程序所需的内存数量。
 
-《Redis 实战》是《Redis in Action》一书的简体中文翻译版，
-译者为黄健宏（huangz）。
-**书本目前的翻译工作已经完成，
-正在进行后续的排版和检查，
-预计9月份就会印刷并出版。**
-
-要了解本书的最新消息，
-请定期访问本网站，
-或者关注译者的\ `微博 <http://weibo.com/huangz1990>`_\ 、\ `豆瓣 <http://www.douban.com/people/i_m_huangz/>`_\ 、\ `twitter <https://twitter.com/huangz1990>`_\ 。
+综上所述，
+《Redis实战》将是一本对于学习和使用 Redis 来说不可多得的参考书籍，
+无论是 Redis 新手还是有一定经验的 Redis 使用者，
+应该都能从本书中获益。
 
 
-目录
+购买方法
 ------------------
+
+《Redis实战》将于 9 月底印刷，预计将于国庆之后在各大网店陆续上市，书本正式发售之后这里将贴出各个网店的购买链接。
+
+另外还有《Redis实战》译者签名版可供购买，具体购买方法将于近日公布，敬请期待！
+
+
+查看目录并试读
+-------------------
+
+《Redis实战》全书共 300 页，分为四个部分，包含 11 个章节和两个附录。
+
+**以下目录中可点击的为试读内容。**
 
 .. toctree::
    :maxdepth: 1
    
-   preview/summary 
    preview/translator-foreword
    preview/foreword
    preview/preface
    preview/acknowledgments
    preview/about-this-book
    preview/about-the-cover
-   preview/about-the-translator
 
 **第一部分：基础知识**
 
@@ -135,6 +143,33 @@ Manning 出版社出版的一本关于 Redis 应用方面的书籍，
    preview/appendx-a
    preview/appendx-b 
 
+
+中文注释源码
+------------------
+
+为了帮助读者更好地学习《Redis实战》中附带的源代码，
+译者将这些源代码的注释都翻译成了中文，
+你可以在以下页面中在线阅读这些源代码：
+
+.. toctree::
+   :maxdepth: 1
+
+   code-preview/chapter1.rst
+   code-preview/chapter2.rst
+   code-preview/chapter3.rst
+   code-preview/chapter4.rst
+   code-preview/chapter5.rst
+   code-preview/chapter6.rst
+   code-preview/chapter7.rst
+   code-preview/chapter8.rst
+   code-preview/chapter9.rst
+   code-preview/chapter10.rst
+   code-preview/chapter11.rst
+   code-preview/appendx-a.rst
+
+又或者到 https://github.com/huangz1990/riacn-code 下载这些源代码。
+
+
 作者简介
 ------------
 
@@ -177,25 +212,21 @@ Josiah 开始创作这本《Redis 实战》。
 并通过分析源码创作了\ `《Redis 设计与实现》 <http://redisbook.com>`_\ 一书。
 
 除此之外，
-黄健宏还是 Redis 中文文档\ `《Redis 命令参考》 <http://RedisDoc.com>`_\ 的译者，
-以及\ `《Redis 从入门到精通》课程 <http://www.chinahadoop.cn/course/53>`_\ 的讲师。
+黄健宏还是 Redis 中文文档\ `《Redis 命令参考》 <http://RedisDoc.com>`_\ 的译者。
 
-要了解关于《Redis 实战》译者黄健宏（huangz）的更多信息，
+要了解关于《Redis 实战》译者黄健宏的更多信息，
 请访问他的个人主页 `huangz.me <http://huangz.me>`_ 。
 
 
 相关资源
 -----------
 
+在线阅读《Redis in Action》原版：
+https://redislabs.com/academy/redis-in-action
+
 《Redis in Action》在 Manning 出版社的介绍页面：
-http://www.manning.com/carlson/
+https://www.manning.com/books/redis-in-action
 
-《Redis in Action》书中的源码示例：
-https://github.com/josiahcarlson/redis-in-action
+《Redis实战》的豆瓣页面：
+http://book.douban.com/subject/26612779/
 
-《Redis in Action》在 
-`亚马逊 <http://www.amazon.cn/Redis-in-Action-Carlson-Josiah-L/dp/1617290858>`_ 、 
-`amazon.com <http://www.amazon.com/Redis-Action-Josiah-L-Carlson/dp/1617290858>`_ 
-以及
-`豆瓣 <http://book.douban.com/subject/10597898/>`_ 
-的页面。
