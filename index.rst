@@ -230,3 +230,6 @@ https://www.manning.com/books/redis-in-action
 《Redis实战》的豆瓣页面：
 http://book.douban.com/subject/26612779/
 
+《Redis in Action》翻译记事，
+这篇文章记录了《Redis实战》的诞生过程：
+http://blog.huangz.me/diary/2015/memories-of-redis-in-action-translation.html
