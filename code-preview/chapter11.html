@@ -1,0 +1,847 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 11 章相关源代码 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="../index.html" />
+    <link rel="next" title="附录 A 相关源代码" href="appendx-a.html" />
+    <link rel="prev" title="第 10 章相关源代码" href="chapter10.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="appendx-a.html" title="附录 A 相关源代码"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chapter10.html" title="第 10 章相关源代码"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 11 章相关源代码<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="kn">import</span> <span class="nn">bisect</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">unittest</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="kn">import</span> <span class="nn">redis</span>
+
+<span class="c"># 代码清单 11-1</span>
+<span class="c"># &lt;start id=&quot;script-load&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">script_load</span><span class="p">(</span><span class="n">script</span><span class="p">):</span>
+    <span class="c"># 将 SCRIPT LOAD 命令返回的已缓存脚本 SHA1 校验和储存到一个列表里面，</span>
+    <span class="c"># 以便之后在 call() 函数内部对其进行修改。</span>
+    <span class="n">sha</span> <span class="o">=</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span>                
+    <span class="c"># 在调用已载入脚本的时候，</span>
+    <span class="c"># 用户需要将 Redis 连接、脚本要处理的键以及脚本的其他参数传递给脚本。</span>
+    <span class="k">def</span> <span class="nf">call</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[],</span> <span class="n">args</span><span class="o">=</span><span class="p">[],</span> <span class="n">force_eval</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>  
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">force_eval</span><span class="p">:</span>
+            <span class="c"># 程序只会在 SHA1 校验和未被缓存的情况下尝试载入脚本。</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">sha</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>   
+                <span class="c"># 如果 SHA1 校验和未被缓存，那么载入给定的脚本</span>
+                <span class="n">sha</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute_command</span><span class="p">(</span>              
+                    <span class="s">&quot;SCRIPT&quot;</span><span class="p">,</span> <span class="s">&quot;LOAD&quot;</span><span class="p">,</span> <span class="n">script</span><span class="p">,</span> <span class="n">parse</span><span class="o">=</span><span class="s">&quot;LOAD&quot;</span><span class="p">)</span> 
+    
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c"># 使用已缓存的 SHA1 校验和执行命令。</span>
+                <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute_command</span><span class="p">(</span>                    
+                    <span class="s">&quot;EVALSHA&quot;</span><span class="p">,</span> <span class="n">sha</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">),</span> <span class="o">*</span><span class="p">(</span><span class="n">keys</span><span class="o">+</span><span class="n">args</span><span class="p">))</span> 
+        
+            <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">ResponseError</span> <span class="k">as</span> <span class="n">msg</span><span class="p">:</span>
+                <span class="c"># 如果错误与脚本缺失无关，那么重新抛出异常。</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">msg</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&quot;NOSCRIPT&quot;</span><span class="p">):</span>      
+                    <span class="k">raise</span>                                       
+        
+        <span class="c"># 当程序接收到脚本错误的时候，</span>
+        <span class="c"># 又或者程序需要强制执行脚本的时候，</span>
+        <span class="c"># 它会使用 EVAL 命令直接执行给定的脚本。</span>
+        <span class="c"># EVAL 命令在执行完脚本之后，</span>
+        <span class="c"># 会自动地把脚本缓存起来，</span>
+        <span class="c"># 而缓存产生的 SHA1 校验和跟使用 EVALSHA 命令缓存脚本产生的 SHA1 校验和是完全相同的。</span>
+        <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">execute_command</span><span class="p">(</span>                   
+            <span class="s">&quot;EVAL&quot;</span><span class="p">,</span> <span class="n">script</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">),</span> <span class="o">*</span><span class="p">(</span><span class="n">keys</span><span class="o">+</span><span class="n">args</span><span class="p">))</span>   
+    
+    <span class="c"># 返回一个函数，这个函数在被调用的时候会自动载入并执行脚本。</span>
+    <span class="k">return</span> <span class="n">call</span>            
+<span class="c"># &lt;end id=&quot;script-load&quot;/&gt;</span>
+
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># &lt;start id=&quot;show-script-load&quot;/&gt;</span>
+<span class="sd">&gt;&gt;&gt; ret_1 = script_load(&quot;return 1&quot;)     # 在大多数情况下，我们在载入脚本之后都会储存起脚本载入程序返回的函数引用。</span>
+<span class="sd">&gt;&gt;&gt; ret_1(conn)                         # 在此之后，我们就可以通过传入连接对象以及脚本需要的其他参数来调用函数。</span>
+<span class="sd">1L                                      # 只要条件允许，就将脚本返回的结果转换成相应的 Python 类型。</span>
+<span class="sd"># &lt;end id=&quot;show-script-load&quot;/&gt;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+
+<span class="c"># 代码清单 11-2</span>
+<span class="c"># &lt;start id=&quot;ch08-post-status&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">create_status</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">):</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 根据用户 ID 获取用户的用户名。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="s">&#39;user:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">uid</span><span class="p">,</span> <span class="s">&#39;login&#39;</span><span class="p">)</span> 
+    <span class="c"># 为这条状态消息创建一个新的 ID 。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;status:id:&#39;</span><span class="p">)</span>             
+    <span class="n">login</span><span class="p">,</span> <span class="nb">id</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+    <span class="c"># 在发布状态消息之前，先检查用户的账号是否存在。</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">login</span><span class="p">:</span>                          
+        <span class="k">return</span> <span class="bp">None</span>                        
+
+    <span class="c"># 准备并设置状态消息的各项信息。</span>
+    <span class="n">data</span><span class="o">.</span><span class="n">update</span><span class="p">({</span>
+        <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="n">message</span><span class="p">,</span>               
+        <span class="s">&#39;posted&#39;</span><span class="p">:</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>             
+        <span class="s">&#39;id&#39;</span><span class="p">:</span> <span class="nb">id</span><span class="p">,</span>                          
+        <span class="s">&#39;uid&#39;</span><span class="p">:</span> <span class="n">uid</span><span class="p">,</span>                        
+        <span class="s">&#39;login&#39;</span><span class="p">:</span> <span class="n">login</span><span class="p">,</span>                    
+    <span class="p">})</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">hmset</span><span class="p">(</span><span class="s">&#39;status:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="nb">id</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>  
+    <span class="c"># 更新用户的已发送状态消息数量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="s">&#39;user:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">uid</span><span class="p">,</span> <span class="s">&#39;posts&#39;</span><span class="p">)</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+    <span class="c"># 返回新创建的状态消息的 ID 。</span>
+    <span class="k">return</span> <span class="nb">id</span>                              
+<span class="c"># &lt;end id=&quot;ch08-post-status&quot;/&gt;</span>
+
+
+<span class="n">_create_status</span> <span class="o">=</span> <span class="n">create_status</span>
+<span class="c"># 代码清单 11-3</span>
+<span class="c"># &lt;start id=&quot;post-status-lua&quot;/&gt;</span>
+<span class="c"># 这个函数接受的参数和原版消息发布函数接受的参数一样。</span>
+<span class="k">def</span> <span class="nf">create_status</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">**</span><span class="n">data</span><span class="p">):</span>         
+    <span class="c"># 准备好对状态消息进行设置所需的各个参数和属性。</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="p">[</span>                                            
+        <span class="s">&#39;message&#39;</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span>                             
+        <span class="s">&#39;posted&#39;</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>                          
+        <span class="s">&#39;uid&#39;</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span>                                     
+    <span class="p">]</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>                 
+        <span class="n">args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>                               
+        <span class="n">args</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>                             
+
+    <span class="k">return</span> <span class="n">create_status_lua</span><span class="p">(</span>                          
+        <span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;user:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">uid</span><span class="p">,</span> <span class="s">&#39;status:id:&#39;</span><span class="p">],</span> <span class="n">args</span><span class="p">)</span>   
+
+<span class="n">create_status_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">-- 根据用户 ID ，获取用户的用户名。</span>
+<span class="s">-- 记住，Lua 表格的索引是从 1 开始的，</span>
+<span class="s">-- 而不是像 Python 和很多其他语言那样从 0 开始。</span>
+<span class="s">local login = redis.call(&#39;hget&#39;, KEYS[1], &#39;login&#39;)    </span>
+<span class="s">-- 如果用户并未登录，那么向调用者说明这一情况。</span>
+<span class="s">if not login then                                    </span>
+<span class="s">    return false                                       </span>
+<span class="s">end</span>
+<span class="s">-- 获取一个新的状态消息 ID 。</span>
+<span class="s">local id = redis.call(&#39;incr&#39;, KEYS[2])                 </span>
+<span class="s">-- 准备好负责储存状态消息的键。</span>
+<span class="s">local key = string.format(&#39;status:</span><span class="si">%s</span><span class="s">&#39;, id)             </span>
+
+<span class="s">-- 为状态消息执行数据设置操作。</span>
+<span class="s">redis.call(&#39;hmset&#39;, key,                               </span>
+<span class="s">    &#39;login&#39;, login,                                     </span>
+<span class="s">    &#39;id&#39;, id,                                         </span>
+<span class="s">    unpack(ARGV))                                       </span>
+<span class="s">--  对用户的已发布消息计数器执行自增操作。</span>
+<span class="s">redis.call(&#39;hincrby&#39;, KEYS[1], &#39;posts&#39;, 1)             </span>
+
+<span class="s">-- 返回状态消息的 ID 。</span>
+<span class="s">return id                                              </span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;post-status-lua&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 11-4</span>
+<span class="c"># &lt;start id=&quot;old-lock&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_lock_with_timeout</span><span class="p">(</span>
+    <span class="n">conn</span><span class="p">,</span> <span class="n">lockname</span><span class="p">,</span> <span class="n">acquire_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">lock_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c"># 128 位随机标识符。</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                     
+    <span class="n">lockname</span> <span class="o">=</span> <span class="s">&#39;lock:&#39;</span> <span class="o">+</span> <span class="n">lockname</span>
+    <span class="c"># 确保传给 EXPIRE 的都是整数。</span>
+    <span class="n">lock_timeout</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">lock_timeout</span><span class="p">))</span>        
+    
+    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">acquire_timeout</span>
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
+        <span class="c"># 获取锁并设置过期时间。</span>
+        <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">setnx</span><span class="p">(</span><span class="n">lockname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>           
+            <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">lockname</span><span class="p">,</span> <span class="n">lock_timeout</span><span class="p">)</span>        
+            <span class="k">return</span> <span class="n">identifier</span>
+        <span class="c"># 检查过期时间，并在有需要时对其进行更新。</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">conn</span><span class="o">.</span><span class="n">ttl</span><span class="p">(</span><span class="n">lockname</span><span class="p">):</span>                   
+            <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">lockname</span><span class="p">,</span> <span class="n">lock_timeout</span><span class="p">)</span>        
+    
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">001</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="bp">False</span>
+<span class="c"># &lt;end id=&quot;old-lock&quot;/&gt;</span>
+
+
+<span class="n">_acquire_lock_with_timeout</span> <span class="o">=</span> <span class="n">acquire_lock_with_timeout</span>
+<span class="c"># 代码清单 11-5</span>
+<span class="c"># &lt;start id=&quot;lock-in-lua&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_lock_with_timeout</span><span class="p">(</span>
+    <span class="n">conn</span><span class="p">,</span> <span class="n">lockname</span><span class="p">,</span> <span class="n">acquire_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">lock_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                      
+    <span class="n">lockname</span> <span class="o">=</span> <span class="s">&#39;lock:&#39;</span> <span class="o">+</span> <span class="n">lockname</span>
+    <span class="n">lock_timeout</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">lock_timeout</span><span class="p">))</span>      
+    
+    <span class="n">acquired</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">acquire_timeout</span>
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">acquired</span><span class="p">:</span>
+        <span class="c"># 执行实际的锁获取操作，通过检查确保 Lua 调用已经执行成功。</span>
+        <span class="n">acquired</span> <span class="o">=</span> <span class="n">acquire_lock_with_timeout_lua</span><span class="p">(</span>                  
+            <span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="n">lockname</span><span class="p">],</span> <span class="p">[</span><span class="n">lock_timeout</span><span class="p">,</span> <span class="n">identifier</span><span class="p">])</span> <span class="o">==</span> <span class="s">&#39;OK&#39;</span>  
+    
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">001</span> <span class="o">*</span> <span class="p">(</span><span class="ow">not</span> <span class="n">acquired</span><span class="p">))</span>
+    
+    <span class="k">return</span> <span class="n">acquired</span> <span class="ow">and</span> <span class="n">identifier</span>
+
+<span class="n">acquire_lock_with_timeout_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">-- 检测锁是否已经存在。（再次提醒，Lua 表格的索引是从 1 开始的。）</span>
+<span class="s">if redis.call(&#39;exists&#39;, KEYS[1]) == 0 then             </span>
+<span class="s">    -- 使用给定的过期时间以及标识符去设置键。</span>
+<span class="s">    return redis.call(&#39;setex&#39;, KEYS[1], unpack(ARGV))  </span>
+<span class="s">end</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;lock-in-lua&quot;/&gt;</span>
+
+
+<span class="k">def</span> <span class="nf">release_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">lockname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">lockname</span> <span class="o">=</span> <span class="s">&#39;lock:&#39;</span> <span class="o">+</span> <span class="n">lockname</span>
+    
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">lockname</span><span class="p">)</span>                  <span class="c">#A</span>
+            <span class="k">if</span> <span class="n">pipe</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">lockname</span><span class="p">)</span> <span class="o">==</span> <span class="n">identifier</span><span class="p">:</span>  <span class="c">#A</span>
+                <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>                      <span class="c">#B</span>
+                <span class="n">pipe</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">lockname</span><span class="p">)</span>             <span class="c">#B</span>
+                <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                    <span class="c">#B</span>
+                <span class="k">return</span> <span class="bp">True</span>                       <span class="c">#B</span>
+    
+            <span class="n">pipe</span><span class="o">.</span><span class="n">unwatch</span><span class="p">()</span>
+            <span class="k">break</span>
+    
+        <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span>       <span class="c">#C</span>
+            <span class="k">pass</span>                                  <span class="c">#C</span>
+    
+    <span class="k">return</span> <span class="bp">False</span>                                  <span class="c">#D</span>
+
+
+<span class="n">_release_lock</span> <span class="o">=</span> <span class="n">release_lock</span>
+<span class="c"># 代码清单 11-6</span>
+<span class="c"># &lt;start id=&quot;release-lock-in-lua&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">release_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">lockname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>
+    <span class="n">lockname</span> <span class="o">=</span> <span class="s">&#39;lock:&#39;</span> <span class="o">+</span> <span class="n">lockname</span>
+    <span class="c"># 调用负责释放锁的 Lua 函数。</span>
+    <span class="k">return</span> <span class="n">release_lock_lua</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="n">lockname</span><span class="p">],</span> <span class="p">[</span><span class="n">identifier</span><span class="p">])</span> 
+
+<span class="n">release_lock_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">-- 检查锁是否匹配。</span>
+<span class="s">if redis.call(&#39;get&#39;, KEYS[1]) == ARGV[1] then              </span>
+<span class="s">    -- 删除锁并确保脚本总是返回真值。</span>
+<span class="s">    return redis.call(&#39;del&#39;, KEYS[1]) or true              </span>
+<span class="s">end</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;release-lock-in-lua&quot;/&gt;</span>
+
+<span class="c"># 代码清单 11-7</span>
+<span class="c"># &lt;start id=&quot;old-acquire-semaphore&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c"># 128 位随机标识符。</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                            
+    <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 清理过期的信号量持有者。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="s">&#39;-inf&#39;</span><span class="p">,</span> <span class="n">now</span> <span class="o">-</span> <span class="n">timeout</span><span class="p">)</span> 
+    <span class="c"># 尝试获取信号量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">now</span><span class="p">)</span>                   
+    <span class="c"># 检查是否成功取得了信号量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrank</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>                       
+    <span class="k">if</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">limit</span><span class="p">:</span>                         
+        <span class="k">return</span> <span class="n">identifier</span>
+
+    <span class="c"># 获取信号量失败，删除之前添加的标识符。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>                             
+    <span class="k">return</span> <span class="bp">None</span>
+<span class="c"># &lt;end id=&quot;old-acquire-semaphore&quot;/&gt;</span>
+
+
+<span class="n">_acquire_semaphore</span> <span class="o">=</span> <span class="n">acquire_semaphore</span>
+<span class="c"># 代码清单 11-8</span>
+<span class="c"># &lt;start id=&quot;acquire-semaphore-lua&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c"># 取得当前时间戳，用于处理超时信号量。</span>
+    <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>                                           
+    <span class="c"># 把所有必须的参数传递给 Lua 函数，实际地执行信号量获取操作。</span>
+    <span class="k">return</span> <span class="n">acquire_semaphore_lua</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="n">semname</span><span class="p">],</span>               
+        <span class="p">[</span><span class="n">now</span><span class="o">-</span><span class="n">timeout</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">now</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())])</span>           
+
+<span class="n">acquire_semaphore_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">-- 清除所有已过期的信号量。</span>
+<span class="s">redis.call(&#39;zremrangebyscore&#39;, KEYS[1], &#39;-inf&#39;, ARGV[1])        </span>
+
+<span class="s">-- 如果还有剩余的信号量可用，那么获取信号量。</span>
+<span class="s">if redis.call(&#39;zcard&#39;, KEYS[1]) &lt; tonumber(ARGV[2]) then        </span>
+<span class="s">    -- 把时间戳添加到超时有序集合里面。</span>
+<span class="s">    redis.call(&#39;zadd&#39;, KEYS[1], ARGV[3], ARGV[4])              </span>
+<span class="s">    return ARGV[4]</span>
+<span class="s">end</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;acquire-semaphore-lua&quot;/&gt;</span>
+
+<span class="k">def</span> <span class="nf">release_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>
+
+<span class="c"># 代码清单 11-9</span>
+<span class="c"># &lt;start id=&quot;refresh-semaphore-lua&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">refresh_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">refresh_semaphore_lua</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="n">semname</span><span class="p">],</span>
+        <span class="c"># 如果信号量没有被刷新，那么 Lua 脚本将返回空值，</span>
+        <span class="c"># 而 Python 会将这个空值转换成 None 并返回给调用者。</span>
+        <span class="p">[</span><span class="n">identifier</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()])</span> <span class="o">!=</span> <span class="bp">None</span>        
+
+<span class="n">refresh_semaphore_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">-- 如果信号量仍然存在，那么对它的时间戳进行更新。</span>
+<span class="s">if redis.call(&#39;zscore&#39;, KEYS[1], ARGV[1]) then                  </span>
+<span class="s">    return redis.call(&#39;zadd&#39;, KEYS[1], ARGV[2], ARGV[1]) or true </span>
+<span class="s">end</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;refresh-semaphore-lua&quot;/&gt;</span>
+
+<span class="n">valid_characters</span> <span class="o">=</span> <span class="s">&#39;`abcdefghijklmnopqrstuvwxyz{&#39;</span>           
+
+<span class="k">def</span> <span class="nf">find_prefix_range</span><span class="p">(</span><span class="n">prefix</span><span class="p">):</span>
+    <span class="n">posn</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="n">valid_characters</span><span class="p">,</span> <span class="n">prefix</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:])</span> 
+    <span class="n">suffix</span> <span class="o">=</span> <span class="n">valid_characters</span><span class="p">[(</span><span class="n">posn</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>               
+    <span class="k">return</span> <span class="n">prefix</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">suffix</span> <span class="o">+</span> <span class="s">&#39;{&#39;</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s">&#39;{&#39;</span>         
+
+<span class="c"># 代码清单 11-10</span>
+<span class="c"># &lt;start id=&quot;old-autocomplete-code&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">autocomplete_on_prefix</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">guild</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+    <span class="c"># 根据给定的前缀计算出查找范围的起点和终点。</span>
+    <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">find_prefix_range</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>               
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                       
+    <span class="n">start</span> <span class="o">+=</span> <span class="n">identifier</span>                                   
+    <span class="n">end</span> <span class="o">+=</span> <span class="n">identifier</span>                                     
+    <span class="n">zset_name</span> <span class="o">=</span> <span class="s">&#39;members:&#39;</span> <span class="o">+</span> <span class="n">guild</span>
+
+    <span class="c"># 将范围的起始元素和结束元素添加到有序集合里面。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>               
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">while</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">zset_name</span><span class="p">)</span>
+            <span class="c"># 找到两个被插入元素在有序集合中的排名。</span>
+            <span class="n">sindex</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">zrank</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">start</span><span class="p">)</span>     
+            <span class="n">eindex</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">zrank</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>      
+            <span class="n">erange</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">sindex</span> <span class="o">+</span> <span class="mi">9</span><span class="p">,</span> <span class="n">eindex</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>          
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>
+            <span class="c"># 获取范围内的值，然后删除之前插入的起始元素和结束元素。</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>         
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">sindex</span><span class="p">,</span> <span class="n">erange</span><span class="p">)</span>    
+            <span class="n">items</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>                
+            <span class="k">break</span>
+        <span class="c"># 如果自动补完有序集合已经被其他客户端修改过了，</span>
+        <span class="c"># 那么进行重试。</span>
+        <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span>               
+            <span class="k">continue</span>                                      
+
+    <span class="c"># 如果有其他自动补完操作正在执行，</span>
+    <span class="c"># 那么从获取到的元素里面移除起始元素和终结元素。</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">item</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span> <span class="k">if</span> <span class="s">&#39;{&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">item</span><span class="p">]</span>    
+<span class="c"># &lt;end id=&quot;old-autocomplete-code&quot;/&gt;</span>
+
+
+<span class="n">_autocomplete_on_prefix</span> <span class="o">=</span> <span class="n">autocomplete_on_prefix</span>
+<span class="c"># 代码清单 11-11</span>
+<span class="c"># &lt;start id=&quot;autocomplete-on-prefix-lua&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">autocomplete_on_prefix</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">guild</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+    <span class="c"># 取得范围和标识符。</span>
+    <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">find_prefix_range</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>                 
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                         
+    
+    <span class="c"># 使用 Lua 脚本从 Redis 里面获取数据。</span>
+    <span class="n">items</span> <span class="o">=</span> <span class="n">autocomplete_on_prefix_lua</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span>               
+        <span class="p">[</span><span class="s">&#39;members:&#39;</span> <span class="o">+</span> <span class="n">guild</span><span class="p">],</span>                              
+        <span class="p">[</span><span class="n">start</span><span class="o">+</span><span class="n">identifier</span><span class="p">,</span> <span class="n">end</span><span class="o">+</span><span class="n">identifier</span><span class="p">])</span>                 
+    
+    <span class="c"># 过滤掉所有不想要的元素。</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">item</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span> <span class="k">if</span> <span class="s">&#39;{&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">item</span><span class="p">]</span>      
+
+<span class="n">autocomplete_on_prefix_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">--  把标记起始范围和结束范围的元素添加到有序集合里面。</span>
+<span class="s">redis.call(&#39;zadd&#39;, KEYS[1], 0, ARGV[1], 0, ARGV[2])             </span>
+<span class="s">-- 在有序集合里面找到范围元素的位置。</span>
+<span class="s">local sindex = redis.call(&#39;zrank&#39;, KEYS[1], ARGV[1])            </span>
+<span class="s">local eindex = redis.call(&#39;zrank&#39;, KEYS[1], ARGV[2])            </span>
+<span class="s">-- 计算出想要获取的元素所处的范围。</span>
+<span class="s">eindex = math.min(sindex + 9, eindex - 2)                       </span>
+
+<span class="s">-- 移除范围元素。</span>
+<span class="s">redis.call(&#39;zrem&#39;, KEYS[1], unpack(ARGV))                       </span>
+<span class="s">-- 获取并返回结果。</span>
+<span class="s">return redis.call(&#39;zrange&#39;, KEYS[1], sindex, eindex)            </span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;autocomplete-on-prefix-lua&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 11-12</span>
+<span class="c"># &lt;start id=&quot;ch06-purchase-item-with-lock&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">purchase_item_with_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">buyerid</span><span class="p">,</span> <span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">):</span>
+    <span class="n">buyer</span> <span class="o">=</span> <span class="s">&quot;users:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">buyerid</span>
+    <span class="n">seller</span> <span class="o">=</span> <span class="s">&quot;users:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">sellerid</span>
+    <span class="n">item</span> <span class="o">=</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">)</span>
+    <span class="n">inventory</span> <span class="o">=</span> <span class="s">&quot;inventory:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">buyerid</span>
+
+    <span class="c"># 尝试获取锁。</span>
+    <span class="n">locked</span> <span class="o">=</span> <span class="n">acquire_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;market:&#39;</span><span class="p">)</span>    
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">locked</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">False</span>
+
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># 检查物品是否已经售出，以及买家是否有足够的金钱来购买物品。</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>          
+        <span class="n">pipe</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="n">buyer</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">)</span>              
+        <span class="n">price</span><span class="p">,</span> <span class="n">funds</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>         
+        <span class="k">if</span> <span class="n">price</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">price</span> <span class="o">&gt;</span> <span class="n">funds</span><span class="p">:</span>    
+            <span class="k">return</span> <span class="bp">None</span>                       
+
+        <span class="c"># 将买家支付的货款转移给卖家，并将售出的物品转移给买家。</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">seller</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">price</span><span class="p">))</span>  
+        <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">buyer</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="o">-</span><span class="n">price</span><span class="p">))</span>  
+        <span class="n">pipe</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">inventory</span><span class="p">,</span> <span class="n">itemid</span><span class="p">)</span>               
+        <span class="n">pipe</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>                
+        <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                             
+        <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="c"># 释放锁</span>
+        <span class="n">release_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;market:&#39;</span><span class="p">,</span> <span class="n">locked</span><span class="p">)</span>     
+<span class="c"># &lt;end id=&quot;ch06-purchase-item-with-lock&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 11-13</span>
+<span class="c"># &lt;start id=&quot;purchase-item-lua&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">purchase_item</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">buyerid</span><span class="p">,</span> <span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">):</span>
+    <span class="c"># 准备好执行 Lua 脚本所需的所有键和参数。</span>
+    <span class="n">buyer</span> <span class="o">=</span> <span class="s">&quot;users:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">buyerid</span>                       
+    <span class="n">seller</span> <span class="o">=</span> <span class="s">&quot;users:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">sellerid</span>                     
+    <span class="n">item</span> <span class="o">=</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="p">(</span><span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">)</span>                  
+    <span class="n">inventory</span> <span class="o">=</span> <span class="s">&quot;inventory:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">buyerid</span>               
+
+    <span class="k">return</span> <span class="n">purchase_item_lua</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span>
+        <span class="p">[</span><span class="s">&#39;market:&#39;</span><span class="p">,</span> <span class="n">buyer</span><span class="p">,</span> <span class="n">seller</span><span class="p">,</span> <span class="n">inventory</span><span class="p">],</span> <span class="p">[</span><span class="n">item</span><span class="p">,</span> <span class="n">itemid</span><span class="p">])</span>
+
+<span class="n">purchase_item_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">-- 获取物品的价格以及买家可用的金钱数量。</span>
+<span class="s">local price = tonumber(redis.call(&#39;zscore&#39;, KEYS[1], ARGV[1]))  </span>
+<span class="s">local funds = tonumber(redis.call(&#39;hget&#39;, KEYS[2], &#39;funds&#39;))    </span>
+
+<span class="s">-- 如果物品仍在销售，并且买家也有足够的金钱，那么对物品和金钱进行相应的转移。</span>
+<span class="s">if price and funds and funds &gt;= price then                      </span>
+<span class="s">    redis.call(&#39;hincrby&#39;, KEYS[3], &#39;funds&#39;, price)              </span>
+<span class="s">    redis.call(&#39;hincrby&#39;, KEYS[2], &#39;funds&#39;, -price)            </span>
+<span class="s">    redis.call(&#39;sadd&#39;, KEYS[4], ARGV[2])                        </span>
+<span class="s">    redis.call(&#39;zrem&#39;, KEYS[1], ARGV[1])                       </span>
+<span class="s">    -- 返回真值表示购买操作执行成功。</span>
+<span class="s">    return true                                                </span>
+<span class="s">end</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;purchase-item-lua&quot;/&gt;</span>
+
+<span class="k">def</span> <span class="nf">list_item</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">,</span> <span class="n">price</span><span class="p">):</span>
+    <span class="n">inv</span> <span class="o">=</span> <span class="s">&quot;inventory:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">sellerid</span>
+    <span class="n">item</span> <span class="o">=</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">list_item_lua</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="n">inv</span><span class="p">,</span> <span class="s">&#39;market:&#39;</span><span class="p">],</span> <span class="p">[</span><span class="n">itemid</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">price</span><span class="p">])</span>
+
+<span class="n">list_item_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">if redis.call(&#39;sismember&#39;, KEYS[1], ARGV[1]) ~= 0 then</span>
+<span class="s">    redis.call(&#39;zadd&#39;, KEYS[2], ARGV[2], ARGV[3])</span>
+<span class="s">    redis.call(&#39;srem&#39;, KEYS[1], ARGV[1])</span>
+<span class="s">    return true</span>
+<span class="s">end</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+
+
+<span class="c"># 代码清单 11-14</span>
+<span class="c"># &lt;start id=&quot;sharded-list-push&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">sharded_push_helper</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">items</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="c"># 把元素组成的序列转换成列表。</span>
+    <span class="n">items</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">items</span><span class="p">)</span>                                
+    <span class="n">total</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c"># 仍然有元素需要推入……</span>
+    <span class="k">while</span> <span class="n">items</span><span class="p">:</span>                                       
+        <span class="c"># ……通过调用 Lua 脚本，把元素推入到分片列表里面。</span>
+        <span class="n">pushed</span> <span class="o">=</span> <span class="n">sharded_push_lua</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span>                
+            <span class="p">[</span><span class="n">key</span><span class="o">+</span><span class="s">&#39;:&#39;</span><span class="p">,</span> <span class="n">key</span><span class="o">+</span><span class="s">&#39;:first&#39;</span><span class="p">,</span> <span class="n">key</span><span class="o">+</span><span class="s">&#39;:last&#39;</span><span class="p">],</span>      
+            <span class="c"># 这个程序目前每次最多只会推入 64 个元素，</span>
+            <span class="c"># 读者可以根据自己的压缩列表最大长度来调整这个数值。</span>
+            <span class="p">[</span><span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;cmd&#39;</span><span class="p">]]</span> <span class="o">+</span> <span class="n">items</span><span class="p">[:</span><span class="mi">64</span><span class="p">])</span>              
+        <span class="c"># 计算被推入的元素数量。</span>
+        <span class="n">total</span> <span class="o">+=</span> <span class="n">pushed</span>                                
+        <span class="c"># 移除那些已经被推入到分片列表里面的元素。</span>
+        <span class="k">del</span> <span class="n">items</span><span class="p">[:</span><span class="n">pushed</span><span class="p">]</span>                             
+    <span class="c"># 返回被推入元素的总数量。</span>
+    <span class="k">return</span> <span class="n">total</span>                                       
+
+<span class="k">def</span> <span class="nf">sharded_lpush</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">items</span><span class="p">):</span>
+    <span class="c"># 调用 sharded_push_helper() 函数，</span>
+    <span class="c"># 并通过指定的参数告诉它应该执行左端推入操作还是右端推入操作。</span>
+    <span class="k">return</span> <span class="n">sharded_push_helper</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">items</span><span class="p">,</span> <span class="n">cmd</span><span class="o">=</span><span class="s">&#39;lpush&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">sharded_rpush</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">items</span><span class="p">):</span>
+    <span class="c"># 调用 sharded_push_helper() 函数，</span>
+    <span class="c"># 并通过指定的参数告诉它应该执行左端推入操作还是右端推入操作。</span>
+    <span class="k">return</span> <span class="n">sharded_push_helper</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">items</span><span class="p">,</span> <span class="n">cmd</span><span class="o">=</span><span class="s">&#39;rpush&#39;</span><span class="p">)</span>
+
+<span class="n">sharded_push_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">-- 确定每个列表分片的最大长度。</span>
+<span class="s">local max = tonumber(redis.call(                            </span>
+<span class="s">    &#39;config&#39;, &#39;get&#39;, &#39;list-max-ziplist-entries&#39;)[2])        </span>
+<span class="s">-- 如果没有元素需要进行推入，又或者压缩列表的最大长度太小，那么返回 0 。</span>
+<span class="s">if #ARGV &lt; 2 or max &lt; 2 then return 0 end                  </span>
+
+<span class="s">-- 弄清楚程序要对列表的左端还是右端进行推入，然后取得那一端对应的分片。</span>
+<span class="s">local skey = ARGV[1] == &#39;lpush&#39; and KEYS[2] or KEYS[3]     </span>
+<span class="s">local shard = redis.call(&#39;get&#39;, skey) or &#39;0&#39;              </span>
+
+<span class="s">while 1 do</span>
+<span class="s">    -- 取得分片的当前长度。</span>
+<span class="s">    local current = tonumber(redis.call(&#39;llen&#39;, KEYS[1]..shard))   </span>
+<span class="s">    -- 计算出在不超过限制的情况下，可以将多少个元素推入到目前的列表里面。</span>
+<span class="s">    -- 此外，在列表里面保留一个节点的空间以便处理之后可能发生的阻塞弹出操作。</span>
+<span class="s">    local topush = math.min(#ARGV - 1, max - current - 1)          </span>
+<span class="s">    -- 在条件允许的情况下，向列表推入尽可能多的元素。</span>
+<span class="s">    if topush &gt; 0 then                                              </span>
+<span class="s">        redis.call(ARGV[1], KEYS[1]..shard, unpack(ARGV, 2, topush+1))</span>
+<span class="s">        return topush                                                 </span>
+<span class="s">    end</span>
+<span class="s">    -- 否则的话，生成一个新的分片并继续进行未完成的推入工作。</span>
+<span class="s">    shard = redis.call(ARGV[1] == &#39;lpush&#39; and &#39;decr&#39; or &#39;incr&#39;, skey) </span>
+<span class="s">end</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;sharded-list-push&quot;/&gt;</span>
+
+<span class="k">def</span> <span class="nf">sharded_llen</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">sharded_llen_lua</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="n">key</span><span class="o">+</span><span class="s">&#39;:&#39;</span><span class="p">,</span> <span class="n">key</span><span class="o">+</span><span class="s">&#39;:first&#39;</span><span class="p">,</span> <span class="n">key</span><span class="o">+</span><span class="s">&#39;:last&#39;</span><span class="p">])</span>
+
+<span class="n">sharded_llen_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">local shardsize = tonumber(redis.call(</span>
+<span class="s">    &#39;config&#39;, &#39;get&#39;, &#39;list-max-ziplist-entries&#39;)[2])</span>
+
+<span class="s">local first = tonumber(redis.call(&#39;get&#39;, KEYS[2]) or &#39;0&#39;)</span>
+<span class="s">local last = tonumber(redis.call(&#39;get&#39;, KEYS[3]) or &#39;0&#39;)</span>
+
+<span class="s">local total = 0</span>
+<span class="s">total = total + tonumber(redis.call(&#39;llen&#39;, KEYS[1]..first))</span>
+<span class="s">if first ~= last then</span>
+<span class="s">    total = total + (last - first - 1) * (shardsize-1)</span>
+<span class="s">    total = total + tonumber(redis.call(&#39;llen&#39;, KEYS[1]..last))</span>
+<span class="s">end</span>
+
+<span class="s">return total</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+
+
+<span class="c"># 代码清单 11-15</span>
+<span class="c"># &lt;start id=&quot;sharded-list-pop-lua&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">sharded_lpop</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">sharded_list_pop_lua</span><span class="p">(</span>
+        <span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="n">key</span><span class="o">+</span><span class="s">&#39;:&#39;</span><span class="p">,</span> <span class="n">key</span><span class="o">+</span><span class="s">&#39;:first&#39;</span><span class="p">,</span> <span class="n">key</span><span class="o">+</span><span class="s">&#39;:last&#39;</span><span class="p">],</span> <span class="p">[</span><span class="s">&#39;lpop&#39;</span><span class="p">])</span>
+
+<span class="k">def</span> <span class="nf">sharded_rpop</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">sharded_list_pop_lua</span><span class="p">(</span>
+        <span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="n">key</span><span class="o">+</span><span class="s">&#39;:&#39;</span><span class="p">,</span> <span class="n">key</span><span class="o">+</span><span class="s">&#39;:first&#39;</span><span class="p">,</span> <span class="n">key</span><span class="o">+</span><span class="s">&#39;:last&#39;</span><span class="p">],</span> <span class="p">[</span><span class="s">&#39;rpop&#39;</span><span class="p">])</span>
+
+<span class="n">sharded_list_pop_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">-- 找到需要执行弹出操作的分片。</span>
+<span class="s">local skey = ARGV[1] == &#39;lpop&#39; and KEYS[2] or KEYS[3]          </span>
+<span class="s">-- 找到不需要执行弹出操作的分片。</span>
+<span class="s">local okey = ARGV[1] ~= &#39;lpop&#39; and KEYS[2] or KEYS[3]          </span>
+<span class="s">-- 获取需要执行弹出操作的分片的 ID 。</span>
+<span class="s">local shard = redis.call(&#39;get&#39;, skey) or &#39;0&#39;                 </span>
+
+<span class="s">-- 从分片对应的列表里面弹出一个元素。</span>
+<span class="s">local ret = redis.call(ARGV[1], KEYS[1]..shard)                 </span>
+<span class="s">-- 如果程序因为分片为空而没有得到弹出元素，</span>
+<span class="s">-- 又或者弹出操作使得分片变空了，那么对分片端点进行清理。</span>
+<span class="s">if not ret or redis.call(&#39;llen&#39;, KEYS[1]..shard) == &#39;0&#39; then    </span>
+<span class="s">    -- 获取不需要执行弹出操作的分片的 ID 。</span>
+<span class="s">    local oshard = redis.call(&#39;get&#39;, okey) or &#39;0&#39;               </span>
+
+<span class="s">    -- 如果分片列表的两端相同，那么说明它已经不包含任何元素，操作执行完毕。</span>
+<span class="s">    if shard == oshard then                                    </span>
+<span class="s">        return ret                                              </span>
+<span class="s">    end</span>
+
+<span class="s">    -- 根据被弹出的元素来自列表的左端还是右端，</span>
+<span class="s">    -- 决定应该增加还是减少分片的 ID 。</span>
+<span class="s">    local cmd = ARGV[1] == &#39;lpop&#39; and &#39;incr&#39; or &#39;decr&#39;          </span>
+<span class="s">    -- 调整分片的端点（endpoint）。</span>
+<span class="s">    shard = redis.call(cmd, skey)                               </span>
+<span class="s">    if not ret then</span>
+<span class="s">        -- 如果之前没有取得弹出元素，那么尝试对新分片进行弹出。</span>
+<span class="s">        ret = redis.call(ARGV[1], KEYS[1]..shard)              </span>
+<span class="s">    end</span>
+<span class="s">end</span>
+<span class="s">return ret</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;sharded-list-pop-lua&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 11-16</span>
+<span class="c"># &lt;start id=&quot;sharded-blocking-list-pop&quot;/&gt;</span>
+<span class="c"># 预先定义好的伪元素，读者也可以按自己的需要，</span>
+<span class="c"># 把这个伪元素替换成某个不可能出现在分片列表里面的值。</span>
+<span class="n">DUMMY</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                                          
+
+<span class="c"># 定义一个辅助函数，</span>
+<span class="c"># 这个函数会为左端阻塞弹出操作以及右端阻塞弹出操作执行实际的弹出动作。</span>
+<span class="k">def</span> <span class="nf">sharded_bpop_helper</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">pop</span><span class="p">,</span> <span class="n">bpop</span><span class="p">,</span> <span class="n">endp</span><span class="p">,</span> <span class="n">push</span><span class="p">):</span> 
+    <span class="c"># 准备好流水线对象和超时信息。</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>                                    
+    <span class="n">timeout</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">timeout</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">2</span><span class="o">**</span><span class="mi">64</span>                             
+    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">timeout</span>                                     
+    
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
+        <span class="c"># 尝试执行一次非阻塞弹出，</span>
+        <span class="c"># 如果这个操作成功取得了一个弹出值，</span>
+        <span class="c"># 并且这个值并不是伪元素，那么返回这个值。</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">pop</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>                                     
+        <span class="k">if</span> <span class="n">result</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">DUMMY</span><span class="p">):</span>                             
+            <span class="k">return</span> <span class="n">result</span>                                          
+    
+        <span class="c"># 取得程序认为需要对其执行弹出操作的分片。</span>
+        <span class="n">shard</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span> <span class="o">+</span> <span class="n">endp</span><span class="p">)</span> <span class="ow">or</span> <span class="s">&#39;0&#39;</span>                        
+        <span class="c"># 运行 Lua 脚本辅助程序，</span>
+        <span class="c"># 它会在程序尝试从错误的分片里面弹出元素的时候，</span>
+        <span class="c"># 将一个伪元素推入到那个分片里面。</span>
+        <span class="n">sharded_bpop_helper_lua</span><span class="p">(</span><span class="n">pipe</span><span class="p">,</span> <span class="p">[</span><span class="n">key</span> <span class="o">+</span> <span class="s">&#39;:&#39;</span><span class="p">,</span> <span class="n">key</span> <span class="o">+</span> <span class="n">endp</span><span class="p">],</span>    
+            <span class="c"># 因为程序不能在流水线里面执行一个可能会失败的 EVALSHA 调用，</span>
+            <span class="c"># 所以这里需要使用 force_eval 参数，</span>
+            <span class="c"># 确保程序调用的是 EVAL 命令而不是 EVALSHA 命令。</span>
+            <span class="p">[</span><span class="n">shard</span><span class="p">,</span> <span class="n">push</span><span class="p">,</span> <span class="n">DUMMY</span><span class="p">],</span> <span class="n">force_eval</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>                 
+        <span class="c">#  使用用户传入的 BLPOP 命令或 BRPOP 命令，对列表执行阻塞弹出操作。</span>
+        <span class="nb">getattr</span><span class="p">(</span><span class="n">pipe</span><span class="p">,</span> <span class="n">bpop</span><span class="p">)(</span><span class="n">key</span> <span class="o">+</span> <span class="s">&#39;:&#39;</span> <span class="o">+</span> <span class="n">shard</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>                  
+    
+        <span class="c"># 如果命令返回了一个元素，那么程序执行完毕；否则的话，进行重试。</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">(</span><span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="ow">or</span> <span class="p">[</span><span class="bp">None</span><span class="p">])[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>                
+        <span class="k">if</span> <span class="n">result</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">DUMMY</span><span class="p">):</span>                            
+            <span class="k">return</span> <span class="n">result</span>                                          
+
+<span class="c"># 这个函数负责调用底层的阻塞弹出操作。</span>
+<span class="k">def</span> <span class="nf">sharded_blpop</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>                             
+    <span class="k">return</span> <span class="n">sharded_bpop_helper</span><span class="p">(</span>                                      
+        <span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">sharded_lpop</span><span class="p">,</span> <span class="s">&#39;blpop&#39;</span><span class="p">,</span> <span class="s">&#39;:first&#39;</span><span class="p">,</span> <span class="s">&#39;lpush&#39;</span><span class="p">)</span> 
+
+<span class="c"># 这个函数负责调用底层的阻塞弹出操作。</span>
+<span class="k">def</span> <span class="nf">sharded_brpop</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>                             
+    <span class="k">return</span> <span class="n">sharded_bpop_helper</span><span class="p">(</span>                                      
+        <span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="n">sharded_rpop</span><span class="p">,</span> <span class="s">&#39;brpop&#39;</span><span class="p">,</span> <span class="s">&#39;:last&#39;</span><span class="p">,</span> <span class="s">&#39;rpush&#39;</span><span class="p">)</span>  
+
+<span class="n">sharded_bpop_helper_lua</span> <span class="o">=</span> <span class="n">script_load</span><span class="p">(</span><span class="s">&#39;&#39;&#39;</span>
+<span class="s">--  找到程序想要对其执行弹出操作的列表端，并取得这个列表端对应的分片。</span>
+<span class="s">local shard = redis.call(&#39;get&#39;, KEYS[2]) or &#39;0&#39;                     </span>
+<span class="s">-- 如果程序接下来要从错误的分片里面弹出元素，那么将伪元素推入到那个分片里面。</span>
+<span class="s">if shard ~= ARGV[1] then                                            </span>
+<span class="s">    redis.call(ARGV[2], KEYS[1]..ARGV[1], ARGV[3])                  </span>
+<span class="s">end</span>
+<span class="s">&#39;&#39;&#39;</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;sharded-blocking-list-pop&quot;/&gt;</span>
+
+<span class="k">class</span> <span class="nc">TestCh11</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">tearDown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">test_load_script</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">script_load</span><span class="p">(</span><span class="s">&quot;return 1&quot;</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_create_status</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;user:1&#39;</span><span class="p">,</span> <span class="s">&#39;login&#39;</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">)</span>
+        <span class="n">sid</span> <span class="o">=</span> <span class="n">_create_status</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;hello&#39;</span><span class="p">)</span>
+        <span class="n">sid2</span> <span class="o">=</span> <span class="n">create_status</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s">&#39;hello&#39;</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="s">&#39;user:1&#39;</span><span class="p">,</span> <span class="s">&#39;posts&#39;</span><span class="p">),</span> <span class="s">&#39;2&#39;</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="s">&#39;status:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">sid</span><span class="p">)</span>
+        <span class="n">data2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="s">&#39;status:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">sid2</span><span class="p">)</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">&#39;posted&#39;</span><span class="p">);</span> <span class="n">data</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">&#39;id&#39;</span><span class="p">)</span>
+        <span class="n">data2</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">&#39;posted&#39;</span><span class="p">);</span> <span class="n">data2</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">&#39;id&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">data2</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_locking</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">identifier</span> <span class="o">=</span> <span class="n">acquire_lock_with_timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">identifier</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">acquire_lock_with_timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+        <span class="n">release_lock</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">acquire_lock_with_timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">))</span>
+    
+    <span class="k">def</span> <span class="nf">test_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+            <span class="n">ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">acquire_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="bp">None</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">acquire_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">01</span><span class="p">)</span>
+        <span class="nb">id</span> <span class="o">=</span> <span class="n">acquire_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">id</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">refresh_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="n">ids</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">release_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="n">ids</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">refresh_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">release_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">release_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">test_autocomplet_on_prefix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="s">&#39;these are some words that we will be autocompleting on&#39;</span><span class="o">.</span><span class="n">split</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;members:test&#39;</span><span class="p">,</span> <span class="n">word</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">autocomplete_on_prefix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;th&#39;</span><span class="p">),</span> <span class="p">[</span><span class="s">&#39;that&#39;</span><span class="p">,</span> <span class="s">&#39;these&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">autocomplete_on_prefix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">),</span> <span class="p">[</span><span class="s">&#39;we&#39;</span><span class="p">,</span> <span class="s">&#39;will&#39;</span><span class="p">,</span> <span class="s">&#39;words&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">autocomplete_on_prefix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;autocompleting&#39;</span><span class="p">),</span> <span class="p">[</span><span class="s">&#39;autocompleting&#39;</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">test_marketplace</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;inventory:1&#39;</span><span class="p">,</span> <span class="s">&#39;1&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;users:2&#39;</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">list_item</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">list_item</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">purchase_item</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;market:&#39;</span><span class="p">,</span> <span class="s">&#39;1.1&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">purchase_item</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">test_sharded_list</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_lpush</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst&#39;</span><span class="p">,</span> <span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">)),</span> <span class="mi">100</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_llen</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst&#39;</span><span class="p">),</span> <span class="mi">100</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_lpush</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst2&#39;</span><span class="p">,</span> <span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)),</span> <span class="mi">1000</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_llen</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst2&#39;</span><span class="p">),</span> <span class="mi">1000</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_rpush</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst2&#39;</span><span class="p">,</span> <span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1001</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)),</span> <span class="mi">1000</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_llen</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst2&#39;</span><span class="p">),</span> <span class="mi">2000</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_lpop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst2&#39;</span><span class="p">),</span> <span class="s">&#39;999&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_rpop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst2&#39;</span><span class="p">),</span> <span class="s">&#39;-1000&#39;</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">999</span><span class="p">):</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="n">sharded_lpop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst2&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="s">&#39;0&#39;</span><span class="p">)</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">def</span> <span class="nf">pop_some</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">fcn</span><span class="p">,</span> <span class="n">lst</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">timeout</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">count</span><span class="p">):</span>
+                <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sharded_blpop</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">lst</span><span class="p">,</span> <span class="n">timeout</span><span class="p">))</span>
+        
+        <span class="n">t</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">pop_some</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">sharded_blpop</span><span class="p">,</span> <span class="s">&#39;lst3&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">setDaemon</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_rpush</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst3&#39;</span><span class="p">,</span> <span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)),</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">sharded_rpush</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;lst3&#39;</span><span class="p">,</span> <span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">)),</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;0&#39;</span><span class="p">,</span> <span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="s">&#39;2&#39;</span><span class="p">,</span> <span class="s">&#39;3&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="s">&#39;4&#39;</span><span class="p">,</span> <span class="s">&#39;5&#39;</span><span class="p">,</span> <span class="s">&#39;6&#39;</span><span class="p">,</span> <span class="s">&#39;7&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">])</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="appendx-a.html" title="附录 A 相关源代码"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="chapter10.html" title="第 10 章相关源代码"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

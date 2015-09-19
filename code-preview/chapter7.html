@@ -1,0 +1,982 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 7 章相关源代码 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="../index.html" />
+    <link rel="next" title="第 8 章相关源代码" href="chapter8.html" />
+    <link rel="prev" title="第 6 章相关源代码" href="chapter6.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chapter8.html" title="第 8 章相关源代码"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chapter6.html" title="第 6 章相关源代码"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 7 章相关源代码<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">unittest</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="kn">import</span> <span class="nn">redis</span>
+
+<span class="n">AVERAGE_PER_1K</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="c"># 代码清单 7-1</span>
+<span class="c"># &lt;start id=&quot;tokenize-and-index&quot;/&gt;</span>
+<span class="c"># 预先定义好从网上获取的停止词。</span>
+<span class="n">STOP_WORDS</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="s">&#39;&#39;&#39;able about across after all almost also am among</span>
+<span class="s">an and any are as at be because been but by can cannot could dear did</span>
+<span class="s">do does either else ever every for from get got had has have he her</span>
+<span class="s">hers him his how however if in into is it its just least let like</span>
+<span class="s">likely may me might most must my neither no nor not of off often on</span>
+<span class="s">only or other our own rather said say says she should since so some</span>
+<span class="s">than that the their them then there these they this tis to too twas us</span>
+<span class="s">wants was we were what when where which while who whom why will with</span>
+<span class="s">would yet you your&#39;&#39;&#39;</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>                                          
+
+<span class="c">#  根据定义提取单词的正则表达式。</span>
+<span class="n">WORDS_RE</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">&quot;[a-z&#39;]{2,}&quot;</span><span class="p">)</span>                                    
+
+<span class="k">def</span> <span class="nf">tokenize</span><span class="p">(</span><span class="n">content</span><span class="p">):</span>
+    <span class="c"># 将文章包含的单词储存到 Python 集合里面。</span>
+    <span class="n">words</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>                                                       
+    <span class="c"># 遍历文章包含的所有单词。</span>
+    <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">WORDS_RE</span><span class="o">.</span><span class="n">finditer</span><span class="p">(</span><span class="n">content</span><span class="o">.</span><span class="n">lower</span><span class="p">()):</span>                    
+        <span class="c"># 剔除所有位于单词前面或后面的单引号。</span>
+        <span class="n">word</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&quot;&#39;&quot;</span><span class="p">)</span>                                 
+        <span class="c"># 保留那些至少有两个字符长的单词。</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">word</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>                                              
+            <span class="n">words</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>                                             
+    <span class="c"># 返回一个集合，集合里面包含了所有被保留并且不是停止词的单词。</span>
+    <span class="k">return</span> <span class="n">words</span> <span class="o">-</span> <span class="n">STOP_WORDS</span>                                          
+
+<span class="k">def</span> <span class="nf">index_document</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">docid</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
+    <span class="c"># 对内容进行标记化处理，并取得处理产生的单词。</span>
+    <span class="n">words</span> <span class="o">=</span> <span class="n">tokenize</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>                                           
+
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 将文章添加到正确的反向索引集合里面。</span>
+    <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">words</span><span class="p">:</span>                                                
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">word</span><span class="p">,</span> <span class="n">docid</span><span class="p">)</span>                            
+    <span class="c"># 计算一下，程序为这篇文章添加了多少个独一无二并且不是停止词的单词。</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">())</span>                                    
+<span class="c"># &lt;end id=&quot;tokenize-and-index&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-2</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9158&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">_set_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">names</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">execute</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="c"># 创建一个新的临时标识符。</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                                 
+    <span class="c"># 设置事务流水线，确保每个调用都能获得一致的执行结果。</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span> <span class="k">if</span> <span class="n">execute</span> <span class="k">else</span> <span class="n">conn</span>    
+    <span class="c"># 给每个单词加上 &#39;idx:&#39; 前缀。</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">]</span>              
+    <span class="c"># 为将要执行的集合操作设置相应的参数。</span>
+    <span class="nb">getattr</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="n">method</span><span class="p">)(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">,</span> <span class="o">*</span><span class="n">names</span><span class="p">)</span>        
+    <span class="c"># 吩咐 Redis 在将来自动删除这个集合。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">,</span> <span class="n">ttl</span><span class="p">)</span>                      
+    <span class="k">if</span> <span class="n">execute</span><span class="p">:</span>
+        <span class="c"># 实际地执行操作。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                                 
+    <span class="c"># 将结果集合的 ID 返回给调用者，以便做进一步的处理。</span>
+    <span class="k">return</span> <span class="nb">id</span>                                             
+
+<span class="c"># 执行交集计算的辅助函数。</span>
+<span class="k">def</span> <span class="nf">intersect</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>          
+    <span class="k">return</span> <span class="n">_set_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;sinterstore&#39;</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">ttl</span><span class="p">,</span> <span class="n">_execute</span><span class="p">)</span> 
+
+<span class="c"># 执行并集计算的辅助函数。</span>
+<span class="k">def</span> <span class="nf">union</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>                    
+    <span class="k">return</span> <span class="n">_set_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;sunionstore&#39;</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">ttl</span><span class="p">,</span> <span class="n">_execute</span><span class="p">)</span> 
+
+<span class="c"># 执行差集计算的辅助函数。</span>
+<span class="k">def</span> <span class="nf">difference</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>               
+    <span class="k">return</span> <span class="n">_set_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;sdiffstore&#39;</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">ttl</span><span class="p">,</span> <span class="n">_execute</span><span class="p">)</span>  
+<span class="c"># &lt;end id=&quot;_1314_14473_9158&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-3</span>
+<span class="c"># &lt;start id=&quot;parse-query&quot;/&gt;</span>
+<span class="c"># 查找需要的单词、不需要的单词以及同义词的正则表达式。</span>
+<span class="n">QUERY_RE</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s">&quot;[+-]?[a-z&#39;]{2,}&quot;</span><span class="p">)</span>               
+
+<span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="n">query</span><span class="p">):</span>
+    <span class="c"># 这个集合将用于储存不需要的单词。</span>
+    <span class="n">unwanted</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>                                   
+    <span class="c"># 这个列表将用于储存需要执行交集计算的单词。</span>
+    <span class="nb">all</span> <span class="o">=</span> <span class="p">[]</span>                                           
+    <span class="c"># 这个集合将用于储存目前已发现的同义词。</span>
+    <span class="n">current</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>                                    
+    <span class="c"># 遍历搜索查询语句中的所有单词。</span>
+    <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">QUERY_RE</span><span class="o">.</span><span class="n">finditer</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">lower</span><span class="p">()):</span>     
+        <span class="c"># 检查单词是否带有 + 号前缀或 - 号前缀。</span>
+        <span class="n">word</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">()</span>                            
+        <span class="n">prefix</span> <span class="o">=</span> <span class="n">word</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span>                               
+        <span class="k">if</span> <span class="n">prefix</span> <span class="ow">in</span> <span class="s">&#39;+-&#39;</span><span class="p">:</span>                             
+            <span class="n">word</span> <span class="o">=</span> <span class="n">word</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>                            
+        <span class="k">else</span><span class="p">:</span>                                         
+            <span class="n">prefix</span> <span class="o">=</span> <span class="bp">None</span>                             
+
+        <span class="c"># 剔除所有位于单词前面或者后面的单引号，并略过所有停止词。</span>
+        <span class="n">word</span> <span class="o">=</span> <span class="n">word</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s">&quot;&#39;&quot;</span><span class="p">)</span>                         
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">word</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">STOP_WORDS</span><span class="p">:</span>       
+            <span class="k">continue</span>                                  
+
+        <span class="c"># 如果这是一个不需要的单词，</span>
+        <span class="c"># 那么将它添加到储存不需要单词的集合里面。</span>
+        <span class="k">if</span> <span class="n">prefix</span> <span class="o">==</span> <span class="s">&#39;-&#39;</span><span class="p">:</span>                              
+            <span class="n">unwanted</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>                         
+            <span class="k">continue</span>                                  
+
+        <span class="c"># 如果在同义词集合非空的情况下，</span>
+        <span class="c"># 遇到了一个不带 + 号前缀的单词，</span>
+        <span class="c"># 那么创建一个新的同义词集合。</span>
+        <span class="k">if</span> <span class="n">current</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">prefix</span><span class="p">:</span>                     
+            <span class="nb">all</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">current</span><span class="p">))</span>                  
+            <span class="n">current</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>                            
+        <span class="n">current</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">word</span><span class="p">)</span>                             
+
+    <span class="c"># 将正在处理的单词添加到同义词集合里面。</span>
+    <span class="k">if</span> <span class="n">current</span><span class="p">:</span>                                        
+        <span class="nb">all</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">current</span><span class="p">))</span>                     
+
+    <span class="c"># 把所有剩余的单词都放到最后的交集计算里面进行处理。</span>
+    <span class="k">return</span> <span class="nb">all</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">unwanted</span><span class="p">)</span>                        
+<span class="c"># &lt;end id=&quot;parse-query&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-4</span>
+<span class="c"># &lt;start id=&quot;search-query&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">parse_and_search</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">30</span><span class="p">):</span>
+    <span class="c"># 对查询语句进行分析。</span>
+    <span class="nb">all</span><span class="p">,</span> <span class="n">unwanted</span> <span class="o">=</span> <span class="n">parse</span><span class="p">(</span><span class="n">query</span><span class="p">)</span>                                   
+    <span class="c"># 如果查询语句只包含停止词，那么这次搜索没有任何结果。</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">:</span>                                                    
+        <span class="k">return</span> <span class="bp">None</span>                                                
+
+    <span class="n">to_intersect</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="c"># 遍历各个同义词列表。</span>
+    <span class="k">for</span> <span class="n">syn</span> <span class="ow">in</span> <span class="nb">all</span><span class="p">:</span>                                                
+        <span class="c"># 如果同义词列表包含的单词不止一个，那么执行并集计算。</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">syn</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>                                           
+            <span class="n">to_intersect</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">union</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">syn</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="n">ttl</span><span class="p">))</span>         
+        <span class="c"># 如果同义词列表只包含一个单词，那么直接使用这个单词。</span>
+        <span class="k">else</span><span class="p">:</span>                                                       
+            <span class="n">to_intersect</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">syn</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>                            
+
+    <span class="c"># 如果单词（或者并集计算的结果）有不止一个，那么执行交集计算。</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">to_intersect</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>                                       
+        <span class="n">intersect_result</span> <span class="o">=</span> <span class="n">intersect</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">to_intersect</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="n">ttl</span><span class="p">)</span>   
+    <span class="c"># 如果单词（或者并集计算的结果）只有一个，那么将它用作交集计算的结果。</span>
+    <span class="k">else</span><span class="p">:</span>                                                          
+        <span class="n">intersect_result</span> <span class="o">=</span> <span class="n">to_intersect</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>                         
+
+    <span class="c"># 如果用户给定了不需要的单词，</span>
+    <span class="c"># 那么从交集计算结果里面移除包含这些单词的文章，然后返回搜索结果。</span>
+    <span class="k">if</span> <span class="n">unwanted</span><span class="p">:</span>                                                   
+        <span class="n">unwanted</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">intersect_result</span><span class="p">)</span>                       
+        <span class="k">return</span> <span class="n">difference</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">unwanted</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="n">ttl</span><span class="p">)</span>                 
+
+    <span class="c"># 如果用户没有给定不需要的单词，那么直接返回交集计算的结果作为搜索的结果。</span>
+    <span class="k">return</span> <span class="n">intersect_result</span>                                        
+<span class="c"># &lt;end id=&quot;search-query&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-5</span>
+<span class="c"># &lt;start id=&quot;sorted-searches&quot;/&gt;</span>
+<span class="c"># 用户可以通过可选的参数来传入已有的搜索结果、指定搜索结果的排序方式，并对结果进行分页。</span>
+<span class="k">def</span> <span class="nf">search_and_sort</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="s">&quot;-updated&quot;</span><span class="p">,</span> 
+                    <span class="n">start</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">20</span><span class="p">):</span>                              
+    <span class="c"># 决定基于文章的哪个属性进行排序，以及是进行升序排序还是降序排序。</span>
+    <span class="n">desc</span> <span class="o">=</span> <span class="n">sort</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="p">)</span>                                   
+    <span class="n">sort</span> <span class="o">=</span> <span class="n">sort</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="p">)</span>                                       
+    <span class="n">by</span> <span class="o">=</span> <span class="s">&quot;kb:doc:*-&gt;&quot;</span> <span class="o">+</span> <span class="n">sort</span>                                      
+    <span class="c"># 告知 Redis ，排序是以数值方式进行还是字母方式进行。</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="n">sort</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&#39;updated&#39;</span><span class="p">,</span> <span class="s">&#39;id&#39;</span><span class="p">,</span> <span class="s">&#39;created&#39;</span><span class="p">)</span>               
+
+    <span class="c"># 如果用户给定了已有的搜索结果，</span>
+    <span class="c"># 并且这个结果仍然存在的话，</span>
+    <span class="c"># 那么延长它的生存时间。</span>
+    <span class="k">if</span> <span class="nb">id</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="nb">id</span><span class="p">,</span> <span class="n">ttl</span><span class="p">):</span>    
+        <span class="nb">id</span> <span class="o">=</span> <span class="bp">None</span>                         
+
+    <span class="c"># 如果用户没有给定已有的搜索结果，</span>
+    <span class="c"># 或者给定的搜索结果已经过期，</span>
+    <span class="c"># 那么执行一次新的搜索操作。</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">id</span><span class="p">:</span>                                      
+        <span class="nb">id</span> <span class="o">=</span> <span class="n">parse_and_search</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="n">ttl</span><span class="p">)</span> 
+
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 获取结果集合的元素数量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">scard</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">)</span>                                     
+    <span class="c"># 根据指定属性对结果进行排序，并且只获取用户指定的那一部分结果。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="n">by</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>                 
+        <span class="n">desc</span><span class="o">=</span><span class="n">desc</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="n">start</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">num</span><span class="p">)</span>                            
+    <span class="n">results</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+    <span class="c"># 返回搜索结果包含的元素数量、搜索结果本身以及搜索结果的 ID ，</span>
+    <span class="c"># 其中搜索结果的 ID 可以用于在之后再次获取本次搜索的结果。</span>
+    <span class="k">return</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">results</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="nb">id</span>                             
+<span class="c"># &lt;end id=&quot;sorted-searches&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-6</span>
+<span class="c"># &lt;start id=&quot;zset_scored_composite&quot;/&gt;</span>
+<span class="c"># 和之前一样，函数接受一个已有搜索结果的 ID 作为可选参数，</span>
+<span class="c"># 以便在结果仍然可用的情况下，对其进行分页。</span>
+<span class="k">def</span> <span class="nf">search_and_zsort</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">update</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">vote</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>   
+                    <span class="n">start</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>                       
+
+    <span class="c"># 尝试更新已有搜索结果的生存时间。</span>
+    <span class="k">if</span> <span class="nb">id</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="nb">id</span><span class="p">,</span> <span class="n">ttl</span><span class="p">):</span>    
+        <span class="nb">id</span> <span class="o">=</span> <span class="bp">None</span>                         
+
+    <span class="c"># 如果传入的结果已经过期，</span>
+    <span class="c"># 或者这是函数第一次进行搜索，</span>
+    <span class="c"># 那么执行标准的集合搜索操作。</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">id</span><span class="p">:</span>                                      
+        <span class="nb">id</span> <span class="o">=</span> <span class="n">parse_and_search</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">query</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="n">ttl</span><span class="p">)</span> 
+
+        <span class="n">scored_search</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="c"># 函数在计算并集的时候也会用到传入的 ID 键，</span>
+            <span class="c"># 但这个键不会被用作排序权重（weight）。</span>
+            <span class="nb">id</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>                                  
+            <span class="c"># 对文章评分进行调整以平衡更新时间和投票数量。</span>
+            <span class="c"># 根据待排序数据的需要，投票数量可以被调整为 1 、10 、100 ，甚至更高。</span>
+            <span class="s">&#39;sort:update&#39;</span><span class="p">:</span> <span class="n">update</span><span class="p">,</span>                 
+            <span class="s">&#39;sort:votes&#39;</span><span class="p">:</span> <span class="n">vote</span>                      
+        <span class="p">}</span>
+        <span class="c"># 使用代码清单 7-7 定义的辅助函数执行交集计算。</span>
+        <span class="nb">id</span> <span class="o">=</span> <span class="n">zintersect</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">scored_search</span><span class="p">,</span> <span class="n">ttl</span><span class="p">)</span>   
+
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 获取结果有序集合的大小。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zcard</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">)</span>                                    
+    <span class="c">#  从搜索结果里面取出一页（page）。</span>
+    <span class="k">if</span> <span class="n">desc</span><span class="p">:</span>                                                     
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zrevrange</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">start</span> <span class="o">+</span> <span class="n">num</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>    
+    <span class="k">else</span><span class="p">:</span>                                                         
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">start</span> <span class="o">+</span> <span class="n">num</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>      
+    <span class="n">results</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+    <span class="c"># 返回搜索结果，以及分页用的 ID 值。</span>
+    <span class="k">return</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">results</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="nb">id</span>                             
+<span class="c"># &lt;end id=&quot;zset_scored_composite&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-7</span>
+<span class="c"># &lt;start id=&quot;zset_helpers&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">_zset_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
+    <span class="c"># 创建一个新的临时标识符。</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                                 
+    <span class="c"># 调用者可以通过传递参数来决定是否使用事务流水线。</span>
+    <span class="n">execute</span> <span class="o">=</span> <span class="n">kw</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s">&#39;_execute&#39;</span><span class="p">,</span> <span class="bp">True</span><span class="p">)</span>                     
+    <span class="c"># 设置事务流水线，保证每个单独的调用都有一致的结果。</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span> <span class="k">if</span> <span class="n">execute</span> <span class="k">else</span> <span class="n">conn</span>    
+    <span class="c"># 为输入的键添加 ‘idx:’ 前缀。</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">scores</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>                             
+        <span class="n">scores</span><span class="p">[</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">scores</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>             
+    <span class="c"># 为将要被执行的操作设置好相应的参数。</span>
+    <span class="nb">getattr</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="n">method</span><span class="p">)(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">)</span>   
+    <span class="c"># 为计算结果有序集合设置过期时间。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">,</span> <span class="n">ttl</span><span class="p">)</span>                      
+    <span class="c"># 除非调用者明确指示要延迟执行操作，否则实际地执行计算操作。</span>
+    <span class="k">if</span> <span class="n">execute</span><span class="p">:</span>                                            
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                                  
+    <span class="c"># 将计算结果的 ID 返回给调用者，以便做进一步的处理。</span>
+    <span class="k">return</span> <span class="nb">id</span>                                               
+
+<span class="c"># 对有序集合执行交集计算的辅助函数。</span>
+<span class="k">def</span> <span class="nf">zintersect</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>                              
+    <span class="k">return</span> <span class="n">_zset_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;zinterstore&#39;</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">items</span><span class="p">),</span> <span class="n">ttl</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">)</span>    
+
+<span class="c"># 对有序集合执行并集计算的辅助函数。</span>
+<span class="k">def</span> <span class="nf">zunion</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>                                  
+    <span class="k">return</span> <span class="n">_zset_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;zunionstore&#39;</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">items</span><span class="p">),</span> <span class="n">ttl</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">)</span>    
+<span class="c"># &lt;end id=&quot;zset_helpers&quot;/&gt;</span>
+
+
+
+<span class="c"># 代码清单 7-8</span>
+<span class="c"># &lt;start id=&quot;string-to-score&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">string_to_score</span><span class="p">(</span><span class="n">string</span><span class="p">,</span> <span class="n">ignore_case</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="c"># 用户可以通过参数来决定是否以大小写无关的方式建立前缀索引。</span>
+    <span class="k">if</span> <span class="n">ignore_case</span><span class="p">:</span>                        
+        <span class="n">string</span> <span class="o">=</span> <span class="n">string</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>            
+
+    <span class="c"># 将字符串的前 6 个字符转换为相应的数字值，</span>
+    <span class="c"># 比如把空字符转换为 0 、制表符（tab）转换为 9 、大写 A 转换为 65 ，</span>
+    <span class="c"># 诸如此类。</span>
+    <span class="n">pieces</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">ord</span><span class="p">,</span> <span class="n">string</span><span class="p">[:</span><span class="mi">6</span><span class="p">])</span>          
+    <span class="c"># 为长度不足 6 个字符的字符串添加占位符，以此来表示这是一个短字符。</span>
+    <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">pieces</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">:</span>                 
+        <span class="n">pieces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>                  
+
+    <span class="n">score</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c"># 对字符串进行转换得出的每个值都会被计算到分值里面，</span>
+    <span class="c"># 并且程序处理空字符的方式和处理占位符的方式并不相同。</span>
+    <span class="k">for</span> <span class="n">piece</span> <span class="ow">in</span> <span class="n">pieces</span><span class="p">:</span>                    
+        <span class="n">score</span> <span class="o">=</span> <span class="n">score</span> <span class="o">*</span> <span class="mi">257</span> <span class="o">+</span> <span class="n">piece</span> <span class="o">+</span> <span class="mi">1</span>    
+
+    <span class="c"># 通过多使用一个二进制位，</span>
+    <span class="c"># 程序可以表明字符串是否正好为 6 个字符长，</span>
+    <span class="c"># 这样它就可以正确地区分出 “robber” 和 “robbers” ，</span>
+    <span class="c"># 尽管这对于区分 “robbers” 和 “robbery” 并无帮助。</span>
+    <span class="k">return</span> <span class="n">score</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">string</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">6</span><span class="p">)</span>    
+<span class="c"># &lt;end id=&quot;string-to-score&quot;/&gt;</span>
+
+<span class="k">def</span> <span class="nf">to_char_map</span><span class="p">(</span><span class="nb">set</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">pos</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">)):</span>
+        <span class="n">out</span><span class="p">[</span><span class="n">val</span><span class="p">]</span> <span class="o">=</span> <span class="n">pos</span><span class="o">-</span><span class="mi">1</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+<span class="n">LOWER</span> <span class="o">=</span> <span class="n">to_char_map</span><span class="p">(</span><span class="nb">set</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="nb">xrange</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="s">&#39;a&#39;</span><span class="p">),</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;z&#39;</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)))</span>
+<span class="n">ALPHA</span> <span class="o">=</span> <span class="n">to_char_map</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">LOWER</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="nb">xrange</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="s">&#39;A&#39;</span><span class="p">),</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;Z&#39;</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)))</span>
+<span class="n">LOWER_NUMERIC</span> <span class="o">=</span> <span class="n">to_char_map</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">LOWER</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="nb">xrange</span><span class="p">(</span><span class="nb">ord</span><span class="p">(</span><span class="s">&#39;0&#39;</span><span class="p">),</span> <span class="nb">ord</span><span class="p">(</span><span class="s">&#39;9&#39;</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)))</span>
+<span class="n">ALPHA_NUMERIC</span> <span class="o">=</span> <span class="n">to_char_map</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">LOWER_NUMERIC</span><span class="p">)</span> <span class="o">|</span> <span class="nb">set</span><span class="p">(</span><span class="n">ALPHA</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">string_to_score_generic</span><span class="p">(</span><span class="n">string</span><span class="p">,</span> <span class="n">mapping</span><span class="p">):</span>
+    <span class="n">length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mi">52</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">mapping</span><span class="p">),</span> <span class="mi">2</span><span class="p">))</span>    <span class="c">#A</span>
+
+    <span class="n">pieces</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">ord</span><span class="p">,</span> <span class="n">string</span><span class="p">[:</span><span class="n">length</span><span class="p">])</span>              <span class="c">#B</span>
+    <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">pieces</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">length</span><span class="p">:</span>                     <span class="c">#C</span>
+        <span class="n">pieces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>                           <span class="c">#C</span>
+
+    <span class="n">score</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">piece</span> <span class="ow">in</span> <span class="n">pieces</span><span class="p">:</span>                            <span class="c">#D</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">mapping</span><span class="p">[</span><span class="n">piece</span><span class="p">]</span>                      <span class="c">#D</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">score</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span> <span class="o">+</span> <span class="n">value</span> <span class="o">+</span> <span class="mi">1</span>    <span class="c">#D</span>
+
+    <span class="k">return</span> <span class="n">score</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">string</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">length</span><span class="p">)</span>       <span class="c">#E</span>
+
+
+
+<span class="c"># &lt;start id=&quot;zadd-string&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">zadd_string</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">pieces</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>                         <span class="c"># 为了进行之后的修改，</span>
+    <span class="k">for</span> <span class="n">piece</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>            <span class="c"># 对传入的不同类型的参数进行合并（combine）</span>
+        <span class="n">pieces</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">piece</span><span class="p">)</span>                    <span class="c">#</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">pieces</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">:</span>                               <span class="c"># 将字符串格式的分值转换为整数分值</span>
+            <span class="n">pieces</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">string_to_score</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>      <span class="c">#</span>
+
+    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">*</span><span class="n">pieces</span><span class="p">)</span>             <span class="c"># 调用已有的 ZADD 方法</span>
+<span class="c"># &lt;end id=&quot;zadd-string&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-9</span>
+<span class="c"># &lt;start id=&quot;ecpm_helpers&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">cpc_to_ecpm</span><span class="p">(</span><span class="n">views</span><span class="p">,</span> <span class="n">clicks</span><span class="p">,</span> <span class="n">cpc</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mf">1000.</span> <span class="o">*</span> <span class="n">cpc</span> <span class="o">*</span> <span class="n">clicks</span> <span class="o">/</span> <span class="n">views</span>
+
+<span class="k">def</span> <span class="nf">cpa_to_ecpm</span><span class="p">(</span><span class="n">views</span><span class="p">,</span> <span class="n">actions</span><span class="p">,</span> <span class="n">cpa</span><span class="p">):</span>
+    <span class="c"># 因为点击通过率是由点击次数除以展示次数计算出的，</span>
+    <span class="c"># 而动作的执行概率则是由动作执行次数除以点击次数计算出的，</span>
+    <span class="c"># 所以这两个概率相乘的结果等于动作执行次数除以展示次数。</span>
+    <span class="k">return</span> <span class="mf">1000.</span> <span class="o">*</span> <span class="n">cpa</span> <span class="o">*</span> <span class="n">actions</span> <span class="o">/</span> <span class="n">views</span> 
+<span class="c"># &lt;end id=&quot;ecpm_helpers&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-10</span>
+<span class="c"># &lt;start id=&quot;index_ad&quot;/&gt;</span>
+<span class="n">TO_ECPM</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s">&#39;cpc&#39;</span><span class="p">:</span> <span class="n">cpc_to_ecpm</span><span class="p">,</span>
+    <span class="s">&#39;cpa&#39;</span><span class="p">:</span> <span class="n">cpa_to_ecpm</span><span class="p">,</span>
+    <span class="s">&#39;cpm&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span><span class="n">args</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+<span class="p">}</span>
+
+<span class="k">def</span> <span class="nf">index_ad</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="n">locations</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="nb">type</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+    <span class="c"># 设置流水线，使得程序可以在一次通信往返里面完成整个索引操作。</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>                        
+
+    <span class="k">for</span> <span class="n">location</span> <span class="ow">in</span> <span class="n">locations</span><span class="p">:</span>
+        <span class="c"># 为了进行定向操作，把广告 ID 添加到所有相关的位置集合里面。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;idx:req:&#39;</span><span class="o">+</span><span class="n">location</span><span class="p">,</span> <span class="nb">id</span><span class="p">)</span>             
+
+    <span class="n">words</span> <span class="o">=</span> <span class="n">tokenize</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>
+    <span class="c"># 对广告包含的单词进行索引。</span>
+    <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">tokenize</span><span class="p">(</span><span class="n">content</span><span class="p">):</span>                          
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">word</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>                
+
+    <span class="c"># 为了评估新广告的效果，</span>
+    <span class="c"># 程序会使用字典来储存广告每千次展示的平均点击次数或平均动作执行次数。</span>
+    <span class="n">rvalue</span> <span class="o">=</span> <span class="n">TO_ECPM</span><span class="p">[</span><span class="nb">type</span><span class="p">](</span>                                
+        <span class="mi">1000</span><span class="p">,</span> <span class="n">AVERAGE_PER_1K</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">value</span><span class="p">)</span>          
+    <span class="c"># 记录这个广告的类型。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;type:&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span>                       
+    <span class="c"># 将广告的 eCPM 添加到一个记录了所有广告的 eCPM 的有序集合里面。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:ad:value:&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="n">rvalue</span><span class="p">)</span>             
+    <span class="c"># 将广告的基本价格（base value）添加到一个记录了所有广告的基本价格的有序集合里面。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;ad:base_value:&#39;</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>            
+    <span class="c"># 把能够对广告进行定向的单词全部记录起来。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;terms:&#39;</span> <span class="o">+</span> <span class="nb">id</span><span class="p">,</span> <span class="o">*</span><span class="nb">list</span><span class="p">(</span><span class="n">words</span><span class="p">))</span>             
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+<span class="c"># &lt;end id=&quot;index_ad&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-11</span>
+<span class="c"># &lt;start id=&quot;target_ad&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">target_ads</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">locations</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 根据用户传入的位置定向参数，找到所有位于该位置的广告，以及这些广告的 eCPM 。</span>
+    <span class="n">matched_ads</span><span class="p">,</span> <span class="n">base_ecpm</span> <span class="o">=</span> <span class="n">match_location</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="n">locations</span><span class="p">)</span>    
+    <span class="c"># 基于匹配的内容计算附加值。</span>
+    <span class="n">words</span><span class="p">,</span> <span class="n">targeted_ads</span> <span class="o">=</span> <span class="n">finish_scoring</span><span class="p">(</span>                          
+        <span class="n">pipeline</span><span class="p">,</span> <span class="n">matched_ads</span><span class="p">,</span> <span class="n">base_ecpm</span><span class="p">,</span> <span class="n">content</span><span class="p">)</span>                 
+
+    <span class="c"># 获取一个 ID ，它可以用于汇报并记录这个被定向的广告。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;ads:served:&#39;</span><span class="p">)</span>                                   
+    <span class="c"># 找到 eCPM 最高的广告，并获取这个广告的 ID 。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrevrange</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">targeted_ads</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>                
+    <span class="n">target_id</span><span class="p">,</span> <span class="n">targeted_ad</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+
+    <span class="c"># 如果没有任何广告与目标位置相匹配，那么返回空值。</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">targeted_ad</span><span class="p">:</span>                                           
+        <span class="k">return</span> <span class="bp">None</span><span class="p">,</span> <span class="bp">None</span>                                         
+
+    <span class="n">ad_id</span> <span class="o">=</span> <span class="n">targeted_ad</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="c"># 记录一系列定向操作的执行结果，作为学习用户行为的其中一个步骤。</span>
+    <span class="n">record_targeting_result</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">target_id</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">,</span> <span class="n">words</span><span class="p">)</span>        
+
+    <span class="c"># 向调用者返回记录本次定向操作相关信息的 ID ，以及被选中的广告的 ID 。</span>
+    <span class="k">return</span> <span class="n">target_id</span><span class="p">,</span> <span class="n">ad_id</span>                                        
+<span class="c"># &lt;end id=&quot;target_ad&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-12</span>
+<span class="c"># &lt;start id=&quot;location_target&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">match_location</span><span class="p">(</span><span class="n">pipe</span><span class="p">,</span> <span class="n">locations</span><span class="p">):</span>
+    <span class="c"># 根据给定的位置，找出所有需要执行并集操作的集合键。</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;req:&#39;</span> <span class="o">+</span> <span class="n">loc</span> <span class="k">for</span> <span class="n">loc</span> <span class="ow">in</span> <span class="n">locations</span><span class="p">]</span>                 
+    <span class="c"># 找出与指定地区相匹配的广告，并将它们储存到集合里面。</span>
+    <span class="n">matched_ads</span> <span class="o">=</span> <span class="n">union</span><span class="p">(</span><span class="n">pipe</span><span class="p">,</span> <span class="n">required</span><span class="p">,</span> <span class="n">ttl</span><span class="o">=</span><span class="mi">300</span><span class="p">,</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>   
+    <span class="c"># 找到储存着所有被匹配广告的集合，</span>
+    <span class="c"># 以及储存着所有被匹配广告的基本 eCPM 的有序集合，</span>
+    <span class="c"># 然后返回它们的 ID 。</span>
+    <span class="k">return</span> <span class="n">matched_ads</span><span class="p">,</span> <span class="n">zintersect</span><span class="p">(</span><span class="n">pipe</span><span class="p">,</span>                           
+        <span class="p">{</span><span class="n">matched_ads</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s">&#39;ad:value:&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span> 
+<span class="c"># &lt;end id=&quot;location_target&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-13</span>
+<span class="c"># &lt;start id=&quot;finish_scoring&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">finish_scoring</span><span class="p">(</span><span class="n">pipe</span><span class="p">,</span> <span class="n">matched</span><span class="p">,</span> <span class="n">base</span><span class="p">,</span> <span class="n">content</span><span class="p">):</span>
+    <span class="n">bonus_ecpm</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="c"># 对内容进行标记化处理，以便与广告进行匹配。</span>
+    <span class="n">words</span> <span class="o">=</span> <span class="n">tokenize</span><span class="p">(</span><span class="n">content</span><span class="p">)</span>                                 
+    <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">words</span><span class="p">:</span>
+        <span class="c"># 找出那些既位于定向位置之内，又拥有页面内容其中一个单词的广告。</span>
+        <span class="n">word_bonus</span> <span class="o">=</span> <span class="n">zintersect</span><span class="p">(</span>                                
+            <span class="n">pipe</span><span class="p">,</span> <span class="p">{</span><span class="n">matched</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="n">word</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>        
+        <span class="n">bonus_ecpm</span><span class="p">[</span><span class="n">word_bonus</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>                             
+
+    <span class="k">if</span> <span class="n">bonus_ecpm</span><span class="p">:</span>
+        <span class="c"># 计算每个广告的最小 eCPM 附加值和最大 eCPM 附加值。</span>
+        <span class="n">minimum</span> <span class="o">=</span> <span class="n">zunion</span><span class="p">(</span>                                       
+            <span class="n">pipe</span><span class="p">,</span> <span class="n">bonus_ecpm</span><span class="p">,</span> <span class="n">aggregate</span><span class="o">=</span><span class="s">&#39;MIN&#39;</span><span class="p">,</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>  
+        <span class="n">maximum</span> <span class="o">=</span> <span class="n">zunion</span><span class="p">(</span>                                       
+            <span class="n">pipe</span><span class="p">,</span> <span class="n">bonus_ecpm</span><span class="p">,</span> <span class="n">aggregate</span><span class="o">=</span><span class="s">&#39;MAX&#39;</span><span class="p">,</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>  
+
+        <span class="c"># 将广告的基本价格、最小 eCPM 附加值的一半以及最大 eCPM 附加值的一半这三者相加起来。</span>
+        <span class="k">return</span> <span class="n">words</span><span class="p">,</span> <span class="n">zunion</span><span class="p">(</span>                                       
+            <span class="n">pipe</span><span class="p">,</span> <span class="p">{</span><span class="n">base</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span> <span class="n">minimum</span><span class="p">:</span><span class="o">.</span><span class="mi">5</span><span class="p">,</span> <span class="n">maximum</span><span class="p">:</span><span class="o">.</span><span class="mi">5</span><span class="p">},</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span> 
+    <span class="c"># 如果页面内容中没有出现任何可匹配的单词，那么返回广告的基本 eCPM 。</span>
+    <span class="k">return</span> <span class="n">words</span><span class="p">,</span> <span class="n">base</span>                                        
+<span class="c"># &lt;end id=&quot;finish_scoring&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-14</span>
+<span class="c"># &lt;start id=&quot;record_targeting&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">record_targeting_result</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">target_id</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">,</span> <span class="n">words</span><span class="p">):</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="c"># 找出内容与广告之间相匹配的那些单词。</span>
+    <span class="n">terms</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;terms:&#39;</span> <span class="o">+</span> <span class="n">ad_id</span><span class="p">)</span>               
+    <span class="n">matched</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">words</span> <span class="o">&amp;</span> <span class="n">terms</span><span class="p">)</span>                         
+    <span class="k">if</span> <span class="n">matched</span><span class="p">:</span>
+        <span class="n">matched_key</span> <span class="o">=</span> <span class="s">&#39;terms:matched:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">target_id</span>
+        <span class="c"># 如果有相匹配的单词出现，那么把它们记录起来，并设置 15 分钟的生存时间。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">matched_key</span><span class="p">,</span> <span class="o">*</span><span class="n">matched</span><span class="p">)</span>              
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">matched_key</span><span class="p">,</span> <span class="mi">900</span><span class="p">)</span>                
+
+    <span class="c"># 为每种类型的广告分别记录它们的展示次数。</span>
+    <span class="nb">type</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="s">&#39;type:&#39;</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">)</span>                       
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;type:</span><span class="si">%s</span><span class="s">:views:&#39;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">)</span>                 
+    <span class="c"># 对广告以及广告包含的单词的展示信息进行记录。</span>
+    <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">matched</span><span class="p">:</span>                                   
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="s">&#39;views:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">ad_id</span><span class="p">,</span> <span class="n">word</span><span class="p">)</span>         
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="s">&#39;views:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">ad_id</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>               
+
+    <span class="c"># 广告每展示 100 次，就更新一次它的 eCPM 。</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">%</span> <span class="mi">100</span><span class="p">:</span>                    
+        <span class="n">update_cpms</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">)</span>                           
+
+<span class="c"># &lt;end id=&quot;record_targeting&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-15</span>
+<span class="c"># &lt;start id=&quot;record_click&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">record_click</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">target_id</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">click_key</span> <span class="o">=</span> <span class="s">&#39;clicks:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">ad_id</span>
+
+    <span class="n">match_key</span> <span class="o">=</span> <span class="s">&#39;terms:matched:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">target_id</span>
+
+    <span class="nb">type</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="s">&#39;type:&#39;</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">)</span>
+    <span class="c"># 如果这是一个按动作计费的广告，</span>
+    <span class="c"># 并且被匹配的单词仍然存在，</span>
+    <span class="c"># 那么刷新这些单词的过期时间。</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s">&#39;cpa&#39;</span><span class="p">:</span>                      
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">match_key</span><span class="p">,</span> <span class="mi">900</span><span class="p">)</span>    
+        <span class="k">if</span> <span class="n">action</span><span class="p">:</span>
+            <span class="c"># 记录动作信息，而不是点击信息。</span>
+            <span class="n">click_key</span> <span class="o">=</span> <span class="s">&#39;actions:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">ad_id</span>  
+
+    <span class="k">if</span> <span class="n">action</span> <span class="ow">and</span> <span class="nb">type</span> <span class="o">==</span> <span class="s">&#39;cpa&#39;</span><span class="p">:</span>
+        <span class="c"># 根据广告的类型，维持一个全局的点击/动作计数器。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;type:</span><span class="si">%s</span><span class="s">:actions:&#39;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">)</span> 
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;type:</span><span class="si">%s</span><span class="s">:clicks:&#39;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">)</span>  
+
+    <span class="c"># 为广告以及所有被定向至该广告的单词记录下本次点击（或动作）。</span>
+    <span class="n">matched</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="n">match_key</span><span class="p">))</span>
+    <span class="n">matched</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s">&#39;&#39;</span><span class="p">)</span>                      
+    <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">matched</span><span class="p">:</span>                    
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="n">click_key</span><span class="p">,</span> <span class="n">word</span><span class="p">)</span>  
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+    <span class="c"># 对广告中出现的所有单词的 eCPM 进行更新。</span>
+    <span class="n">update_cpms</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">)</span>               
+<span class="c"># &lt;end id=&quot;record_click&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-16</span>
+<span class="c"># &lt;start id=&quot;update_cpms&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">update_cpms</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">):</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 获取广告的类型和价格，以及广告包含的所有单词。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="s">&#39;type:&#39;</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">)</span>               
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;ad:base_value:&#39;</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">)</span>    
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;terms:&#39;</span> <span class="o">+</span> <span class="n">ad_id</span><span class="p">)</span>         
+    <span class="nb">type</span><span class="p">,</span> <span class="n">base_value</span><span class="p">,</span> <span class="n">words</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+    <span class="c"># 判断广告的 eCPM 应该基于点击次数进行计算还是基于动作执行次数进行计算。</span>
+    <span class="n">which</span> <span class="o">=</span> <span class="s">&#39;clicks&#39;</span>                                        
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s">&#39;cpa&#39;</span><span class="p">:</span>                                      
+        <span class="n">which</span> <span class="o">=</span> <span class="s">&#39;actions&#39;</span>                                   
+
+    <span class="c"># 根据广告的类型，</span>
+    <span class="c"># 获取这类广告的展示次数和点击次数（或者动作执行次数）。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;type:</span><span class="si">%s</span><span class="s">:views:&#39;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">)</span>                   
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;type:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="n">which</span><span class="p">))</span>              
+    <span class="n">type_views</span><span class="p">,</span> <span class="n">type_clicks</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>            
+    <span class="c"># 将广告的点击率或动作执行率重新写入到全局字典里面。</span>
+    <span class="n">AVERAGE_PER_1K</span><span class="p">[</span><span class="nb">type</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>                                        
+        <span class="mf">1000.</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="n">type_clicks</span> <span class="ow">or</span> <span class="s">&#39;1&#39;</span><span class="p">)</span> <span class="o">/</span> <span class="nb">int</span><span class="p">(</span><span class="n">type_views</span> <span class="ow">or</span> <span class="s">&#39;1&#39;</span><span class="p">))</span>   
+
+    <span class="c"># 如果正在处理的是一个 CPM 广告，</span>
+    <span class="c"># 那么它的 eCPM 已经更新完毕，</span>
+    <span class="c"># 无需再做其他处理。</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s">&#39;cpm&#39;</span><span class="p">:</span>   
+        <span class="k">return</span>          
+
+    <span class="n">view_key</span> <span class="o">=</span> <span class="s">&#39;views:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">ad_id</span>
+    <span class="n">click_key</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">which</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">)</span>
+
+    <span class="n">to_ecpm</span> <span class="o">=</span> <span class="n">TO_ECPM</span><span class="p">[</span><span class="nb">type</span><span class="p">]</span>
+
+    <span class="c"># 获取广告的展示次数，以及广告的点击次数（或者动作执行次数）。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="n">view_key</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>                                  
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="n">click_key</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>                                
+    <span class="n">ad_views</span><span class="p">,</span> <span class="n">ad_clicks</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                      
+    <span class="c"># 如果广告还没有被点击过，那么使用已有的 eCPM 。</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">ad_clicks</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>                                       
+        <span class="n">ad_ecpm</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;idx:ad:value:&#39;</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">)</span>             
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># 计算广告的 eCPM 并更新它的价格。</span>
+        <span class="n">ad_ecpm</span> <span class="o">=</span> <span class="n">to_ecpm</span><span class="p">(</span><span class="n">ad_views</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">,</span> <span class="n">ad_clicks</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">,</span> <span class="n">base_value</span><span class="p">)</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:ad:value:&#39;</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">,</span> <span class="n">ad_ecpm</span><span class="p">)</span>              
+
+    <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">words</span><span class="p">:</span>
+        <span class="c"># 获取单词的展示次数和点击次数（或者动作执行次数）。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="n">view_key</span><span class="p">,</span> <span class="n">word</span><span class="p">)</span>                             
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="n">click_key</span><span class="p">,</span> <span class="n">word</span><span class="p">)</span>                            
+        <span class="n">views</span><span class="p">,</span> <span class="n">clicks</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>                    
+
+        <span class="c"># 如果广告还未被点击过，那么不对 eCPM 进行更新。</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">clicks</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>                                      
+            <span class="k">continue</span>                                               
+
+        <span class="c"># 计算单词的 eCPM 。</span>
+        <span class="n">word_ecpm</span> <span class="o">=</span> <span class="n">to_ecpm</span><span class="p">(</span><span class="n">views</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">,</span> <span class="n">clicks</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">,</span> <span class="n">base_value</span><span class="p">)</span>   
+        <span class="c"># 计算单词的附加值。</span>
+        <span class="n">bonus</span> <span class="o">=</span> <span class="n">word_ecpm</span> <span class="o">-</span> <span class="n">ad_ecpm</span>                               
+        <span class="c"># 将单词的附加值重新写入到为广告包含的每个单词分别记录附加值的有序集合里面。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">word</span><span class="p">,</span> <span class="n">ad_id</span><span class="p">,</span> <span class="n">bonus</span><span class="p">)</span>                 
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+<span class="c"># &lt;end id=&quot;update_cpms&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-17</span>
+<span class="c"># &lt;start id=&quot;slow_job_search&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">add_job</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">required_skills</span><span class="p">):</span>
+    <span class="c"># 把职位所需的技能全部添加到职位对应的集合里面。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;job:&#39;</span> <span class="o">+</span> <span class="n">job_id</span><span class="p">,</span> <span class="o">*</span><span class="n">required_skills</span><span class="p">)</span>       
+
+<span class="k">def</span> <span class="nf">is_qualified</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">candidate_skills</span><span class="p">):</span>
+    <span class="n">temp</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 把求职者拥有的技能全部添加到一个临时集合里面，并设置过期时间。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">temp</span><span class="p">,</span> <span class="o">*</span><span class="n">candidate_skills</span><span class="p">)</span>             
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">temp</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>                           
+    <span class="c"># 找出职位所需技能当中，求职者不具备的那些技能，并将它们记录到结果集合里面。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">sdiff</span><span class="p">(</span><span class="s">&#39;job:&#39;</span> <span class="o">+</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">temp</span><span class="p">)</span>              
+    <span class="c"># 如果求职者具备职位所需的全部技能，那么返回 True 。</span>
+    <span class="k">return</span> <span class="ow">not</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>                  
+<span class="c"># &lt;end id=&quot;slow_job_search&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-18</span>
+<span class="c"># &lt;start id=&quot;job_search_index&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">index_job</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">skills</span><span class="p">):</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">skill</span> <span class="ow">in</span> <span class="n">skills</span><span class="p">:</span>
+        <span class="c"># 将职位 ID 添加到相应的技能集合里面。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;idx:skill:&#39;</span> <span class="o">+</span> <span class="n">skill</span><span class="p">,</span> <span class="n">job_id</span><span class="p">)</span>            
+    <span class="c"># 将职位所需技能的数量添加到记录了所有职位所需技能数量的有序集合里面。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:jobs:req&#39;</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">skills</span><span class="p">)))</span>    
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+<span class="c"># &lt;end id=&quot;job_search_index&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 7-19</span>
+<span class="c"># &lt;start id=&quot;job_search_results&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">find_jobs</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">candidate_skills</span><span class="p">):</span>
+    <span class="c"># 设置好用于计算职位得分的字典。</span>
+    <span class="n">skills</span> <span class="o">=</span> <span class="p">{}</span>                                                
+    <span class="k">for</span> <span class="n">skill</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">candidate_skills</span><span class="p">):</span>                        
+        <span class="n">skills</span><span class="p">[</span><span class="s">&#39;skill:&#39;</span> <span class="o">+</span> <span class="n">skill</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>                          
+
+    <span class="c"># 计算求职者对于每个职位的得分。</span>
+    <span class="n">job_scores</span> <span class="o">=</span> <span class="n">zunion</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">skills</span><span class="p">)</span>                          
+    <span class="c"># 计算出求职者能够胜任以及不能够胜任的职位。</span>
+    <span class="n">final_result</span> <span class="o">=</span> <span class="n">zintersect</span><span class="p">(</span>                                 
+        <span class="n">conn</span><span class="p">,</span> <span class="p">{</span><span class="n">job_scores</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="s">&#39;jobs:req&#39;</span><span class="p">:</span><span class="mi">1</span><span class="p">})</span>                   
+
+    <span class="c"># 返回求职者能够胜任的那些职位。</span>
+    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrangebyscore</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">final_result</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>    
+<span class="c"># &lt;end id=&quot;job_search_results&quot;/&gt;</span>
+
+<span class="c"># 0 is beginner, 1 is intermediate, 2 is expert</span>
+<span class="n">SKILL_LEVEL_LIMIT</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="k">def</span> <span class="nf">index_job_levels</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">skill_levels</span><span class="p">):</span>
+    <span class="n">total_skills</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">skill</span> <span class="k">for</span> <span class="n">skill</span><span class="p">,</span> <span class="n">level</span> <span class="ow">in</span> <span class="n">skill_levels</span><span class="p">))</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">skill</span><span class="p">,</span> <span class="n">level</span> <span class="ow">in</span> <span class="n">skill_levels</span><span class="p">:</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">SKILL_LEVEL_LIMIT</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">wlevel</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">SKILL_LEVEL_LIMIT</span><span class="o">+</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;idx:skill:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">skill</span><span class="p">,</span><span class="n">wlevel</span><span class="p">),</span> <span class="n">job_id</span><span class="p">)</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:jobs:req&#39;</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">total_skills</span><span class="p">)</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">search_job_levels</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">skill_levels</span><span class="p">):</span>
+    <span class="n">skills</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">skill</span><span class="p">,</span> <span class="n">level</span> <span class="ow">in</span> <span class="n">skill_levels</span><span class="p">:</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">SKILL_LEVEL_LIMIT</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">wlevel</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">SKILL_LEVEL_LIMIT</span><span class="o">+</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">skills</span><span class="p">[</span><span class="s">&#39;skill:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">skill</span><span class="p">,</span><span class="n">wlevel</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="n">job_scores</span> <span class="o">=</span> <span class="n">zunion</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">skills</span><span class="p">)</span>
+    <span class="n">final_result</span> <span class="o">=</span> <span class="n">zintersect</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="p">{</span><span class="n">job_scores</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="s">&#39;jobs:req&#39;</span><span class="p">:</span><span class="mi">1</span><span class="p">})</span>
+
+    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrangebyscore</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">final_result</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">index_job_years</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">skill_years</span><span class="p">):</span>
+    <span class="n">total_skills</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">skill</span> <span class="k">for</span> <span class="n">skill</span><span class="p">,</span> <span class="n">level</span> <span class="ow">in</span> <span class="n">skill_years</span><span class="p">))</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">skill</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">skill_years</span><span class="p">:</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span>
+            <span class="s">&#39;idx:skill:</span><span class="si">%s</span><span class="s">:years&#39;</span><span class="o">%</span><span class="n">skill</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">years</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;idx:jobs:all&#39;</span><span class="p">,</span> <span class="n">job_id</span><span class="p">)</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:jobs:req&#39;</span><span class="p">,</span> <span class="n">job_id</span><span class="p">,</span> <span class="n">total_skills</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">search_job_years</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">skill_years</span><span class="p">):</span>
+    <span class="n">skill_years</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">skill_years</span><span class="p">)</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="n">union</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">skill</span><span class="p">,</span> <span class="n">years</span> <span class="ow">in</span> <span class="n">skill_years</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">sub_result</span> <span class="o">=</span> <span class="n">zintersect</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span>
+            <span class="p">{</span><span class="s">&#39;jobs:all&#39;</span><span class="p">:</span><span class="o">-</span><span class="n">years</span><span class="p">,</span> <span class="s">&#39;skill:</span><span class="si">%s</span><span class="s">:years&#39;</span><span class="o">%</span><span class="n">skill</span><span class="p">:</span><span class="mi">1</span><span class="p">},</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">sub_result</span><span class="p">,</span> <span class="s">&#39;(0&#39;</span><span class="p">,</span> <span class="s">&#39;inf&#39;</span><span class="p">)</span>
+        <span class="n">union</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">zintersect</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="p">{</span><span class="s">&#39;jobs:all&#39;</span><span class="p">:</span><span class="mi">1</span><span class="p">,</span> <span class="n">sub_result</span><span class="p">:</span><span class="mi">0</span><span class="p">}),</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+    <span class="n">job_scores</span> <span class="o">=</span> <span class="n">zunion</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="nb">dict</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">union</span><span class="p">),</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+    <span class="n">final_result</span> <span class="o">=</span> <span class="n">zintersect</span><span class="p">(</span><span class="n">pipeline</span><span class="p">,</span> <span class="p">{</span><span class="n">job_scores</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="s">&#39;jobs:req&#39;</span><span class="p">:</span><span class="mi">1</span><span class="p">},</span> <span class="n">_execute</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">final_result</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="k">class</span> <span class="nc">TestCh07</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="s">&#39;this is some random content, look at how it is indexed.&#39;</span>
+    <span class="k">def</span> <span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">tearDown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">test_index_document</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">print</span> <span class="s">&quot;We&#39;re tokenizing some content...&quot;</span>
+        <span class="n">tokens</span> <span class="o">=</span> <span class="n">tokenize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Those tokens are:&quot;</span><span class="p">,</span> <span class="n">tokens</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">tokens</span><span class="p">)</span>
+
+        <span class="k">print</span> <span class="s">&quot;And now we are indexing that content...&quot;</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">index_document</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">tokens</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">t</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+    <span class="k">def</span> <span class="nf">test_set_operations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">index_document</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">intersect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;content&#39;</span><span class="p">,</span> <span class="s">&#39;indexed&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">intersect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;content&#39;</span><span class="p">,</span> <span class="s">&#39;ignored&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">())</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">union</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;content&#39;</span><span class="p">,</span> <span class="s">&#39;ignored&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">difference</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;content&#39;</span><span class="p">,</span> <span class="s">&#39;ignored&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">difference</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;content&#39;</span><span class="p">,</span> <span class="s">&#39;indexed&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">test_parse_query</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="s">&#39;test query without stopwords&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">parse</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="p">([[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">query</span><span class="o">.</span><span class="n">split</span><span class="p">()],</span> <span class="p">[]))</span>
+
+        <span class="n">query</span> <span class="o">=</span> <span class="s">&#39;test +query without -stopwords&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">parse</span><span class="p">(</span><span class="n">query</span><span class="p">),</span> <span class="p">([[</span><span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;query&#39;</span><span class="p">],</span> <span class="p">[</span><span class="s">&#39;without&#39;</span><span class="p">]],</span> <span class="p">[</span><span class="s">&#39;stopwords&#39;</span><span class="p">]))</span>
+
+    <span class="k">def</span> <span class="nf">test_parse_and_search</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">print</span> <span class="s">&quot;And now we are testing search...&quot;</span>
+        <span class="n">index_document</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">parse_and_search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;content&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">parse_and_search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;content indexed random&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">parse_and_search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;content +indexed random&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">parse_and_search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;content indexed +random&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">parse_and_search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;content indexed -random&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">())</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">parse_and_search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;content indexed +random&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;idx:&#39;</span> <span class="o">+</span> <span class="n">r</span><span class="p">),</span> <span class="nb">set</span><span class="p">([</span><span class="s">&#39;test&#39;</span><span class="p">]))</span>
+
+        <span class="k">print</span> <span class="s">&quot;Which passed!&quot;</span>
+
+    <span class="k">def</span> <span class="nf">test_search_with_sort</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">print</span> <span class="s">&quot;And now let&#39;s test searching with sorting...&quot;</span>
+
+        <span class="n">index_document</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="n">index_document</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">hmset</span><span class="p">(</span><span class="s">&#39;kb:doc:test&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s">&#39;updated&#39;</span><span class="p">:</span> <span class="mi">12345</span><span class="p">,</span> <span class="s">&#39;id&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">hmset</span><span class="p">(</span><span class="s">&#39;kb:doc:test2&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s">&#39;updated&#39;</span><span class="p">:</span> <span class="mi">54321</span><span class="p">,</span> <span class="s">&#39;id&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">})</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">search_and_sort</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&quot;content&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">])</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">search_and_sort</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&quot;content&quot;</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="s">&#39;-id&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">])</span>
+        <span class="k">print</span> <span class="s">&quot;Which passed!&quot;</span>
+
+    <span class="k">def</span> <span class="nf">test_search_with_zsort</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">print</span> <span class="s">&quot;And now let&#39;s test searching with sorting via zset...&quot;</span>
+
+        <span class="n">index_document</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="n">index_document</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:sort:update&#39;</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">12345</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="mi">54321</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;idx:sort:votes&#39;</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">search_and_zsort</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&quot;content&quot;</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">])</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">search_and_zsort</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&quot;content&quot;</span><span class="p">,</span> <span class="n">update</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vote</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">])</span>
+        <span class="k">print</span> <span class="s">&quot;Which passed!&quot;</span>
+
+    <span class="k">def</span> <span class="nf">test_string_to_score</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">words</span> <span class="o">=</span> <span class="s">&#39;these are some words that will be sorted&#39;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="n">pairs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">word</span><span class="p">,</span> <span class="n">string_to_score</span><span class="p">(</span><span class="n">word</span><span class="p">))</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">words</span><span class="p">]</span>
+        <span class="n">pairs2</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span>
+        <span class="n">pairs</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+        <span class="n">pairs2</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">pairs2</span><span class="p">)</span>
+
+        <span class="n">words</span> <span class="o">=</span> <span class="s">&#39;these are some words that will be sorted&#39;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="n">pairs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">word</span><span class="p">,</span> <span class="n">string_to_score_generic</span><span class="p">(</span><span class="n">word</span><span class="p">,</span> <span class="n">LOWER</span><span class="p">))</span> <span class="k">for</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">words</span><span class="p">]</span>
+        <span class="n">pairs2</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span>
+        <span class="n">pairs</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+        <span class="n">pairs2</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">pairs2</span><span class="p">)</span>
+
+        <span class="n">zadd_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;key&#39;</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;value&#39;</span><span class="p">,</span> <span class="n">test2</span><span class="o">=</span><span class="s">&#39;other&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;key&#39;</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">),</span> <span class="n">string_to_score</span><span class="p">(</span><span class="s">&#39;value&#39;</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;key&#39;</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">),</span> <span class="n">string_to_score</span><span class="p">(</span><span class="s">&#39;other&#39;</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">test_index_and_target_ads</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">index_ad</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;USA&#39;</span><span class="p">,</span> <span class="s">&#39;CA&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="s">&#39;cpc&#39;</span><span class="p">,</span> <span class="o">.</span><span class="mi">25</span><span class="p">)</span>
+        <span class="n">index_ad</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;2&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;USA&#39;</span><span class="p">,</span> <span class="s">&#39;VA&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span> <span class="o">+</span> <span class="s">&#39; wooooo&#39;</span><span class="p">,</span> <span class="s">&#39;cpc&#39;</span><span class="p">,</span> <span class="o">.</span><span class="mi">125</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+            <span class="n">ro</span> <span class="o">=</span> <span class="n">target_ads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;USA&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">ro</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&#39;1&#39;</span><span class="p">)</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="n">target_ads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;VA&#39;</span><span class="p">],</span> <span class="s">&#39;wooooo&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&#39;2&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;idx:ad:value:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span> <span class="p">[(</span><span class="s">&#39;2&#39;</span><span class="p">,</span> <span class="mf">0.125</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;ad:base_value:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span> <span class="p">[(</span><span class="s">&#39;2&#39;</span><span class="p">,</span> <span class="mf">0.125</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">)])</span>
+
+        <span class="n">record_click</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">ro</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">ro</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;idx:ad:value:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span> <span class="p">[(</span><span class="s">&#39;2&#39;</span><span class="p">,</span> <span class="mf">0.125</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;ad:base_value:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">),</span> <span class="p">[(</span><span class="s">&#39;2&#39;</span><span class="p">,</span> <span class="mf">0.125</span><span class="p">),</span> <span class="p">(</span><span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">)])</span>
+
+    <span class="k">def</span> <span class="nf">test_is_qualified_for_job</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">add_job</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q2&#39;</span><span class="p">,</span> <span class="s">&#39;q3&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">is_qualified</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q3&#39;</span><span class="p">,</span> <span class="s">&#39;q2&#39;</span><span class="p">]))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">is_qualified</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q2&#39;</span><span class="p">]))</span>
+
+    <span class="k">def</span> <span class="nf">test_index_and_find_jobs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">index_job</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test1&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q2&#39;</span><span class="p">,</span> <span class="s">&#39;q3&#39;</span><span class="p">])</span>
+        <span class="n">index_job</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q3&#39;</span><span class="p">,</span> <span class="s">&#39;q4&#39;</span><span class="p">])</span>
+        <span class="n">index_job</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test3&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q3&#39;</span><span class="p">,</span> <span class="s">&#39;q5&#39;</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">find_jobs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">]),</span> <span class="p">[])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">find_jobs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q3&#39;</span><span class="p">,</span> <span class="s">&#39;q4&#39;</span><span class="p">]),</span> <span class="p">[</span><span class="s">&#39;test2&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">find_jobs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q3&#39;</span><span class="p">,</span> <span class="s">&#39;q5&#39;</span><span class="p">]),</span> <span class="p">[</span><span class="s">&#39;test3&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">find_jobs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;q1&#39;</span><span class="p">,</span> <span class="s">&#39;q2&#39;</span><span class="p">,</span> <span class="s">&#39;q3&#39;</span><span class="p">,</span> <span class="s">&#39;q4&#39;</span><span class="p">,</span> <span class="s">&#39;q5&#39;</span><span class="p">]),</span> <span class="p">[</span><span class="s">&#39;test1&#39;</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="s">&#39;test3&#39;</span><span class="p">])</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="chapter8.html" title="第 8 章相关源代码"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="chapter6.html" title="第 6 章相关源代码"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

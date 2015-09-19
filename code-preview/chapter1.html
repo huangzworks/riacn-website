@@ -1,0 +1,408 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 1 章相关源代码 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="../index.html" />
+    <link rel="next" title="第 2 章相关源代码" href="chapter2.html" />
+    <link rel="prev" title="附录B 其他资源和参考资料" href="../preview/appendx-b.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chapter2.html" title="第 2 章相关源代码"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../preview/appendx-b.html" title="附录B 其他资源和参考资料"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 1 章相关源代码<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">unittest</span>
+
+
+<span class="c"># 代码清单 1-1</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">$ redis-cli                                 # 启动redis-cli 客户端</span>
+<span class="sd">redis 127.0.0.1:6379&gt; set hello world       # 将键 hello 的值设置为 world 。</span>
+<span class="sd">OK                                          # SET 命令在执行成功时返回 OK ，Python 客户端会将这个 OK 转换成 True</span>
+<span class="sd">redis 127.0.0.1:6379&gt; get hello             # 获取储存在键 hello 中的值。</span>
+<span class="sd">&quot;world&quot;                                     # 键的值仍然是 world ，跟我们刚才设置的一样。</span>
+<span class="sd">redis 127.0.0.1:6379&gt; del hello             # 删除这个键值对。</span>
+<span class="sd">(integer) 1                                 # 在对值进行删除的时候，DEL 命令将返回被成功删除的值的数量。</span>
+<span class="sd">redis 127.0.0.1:6379&gt; get hello             # 因为键的值已经不存在，所以尝试获取键的值将得到一个 nil ，</span>
+<span class="sd">(nil)                                       # Python 客户端会将这个 nil 转换成 None。</span>
+<span class="sd">redis 127.0.0.1:6379&gt; </span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+
+<span class="c"># 代码清单 1-2</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">redis 127.0.0.1:6379&gt; rpush list-key item   # 在向列表推入新元素之后，该命令会返回列表的当前长度。</span>
+<span class="sd">(integer) 1                                 #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; rpush list-key item2  #</span>
+<span class="sd">(integer) 2                                 #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; rpush list-key item   #</span>
+<span class="sd">(integer) 3                                 #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; lrange list-key 0 -1  # 使用0为范围的起始索引，-1为范围的结束索引，</span>
+<span class="sd">1) &quot;item&quot;                                   # 可以取出列表包含的所有元素。</span>
+<span class="sd">2) &quot;item2&quot;                                  #</span>
+<span class="sd">3) &quot;item&quot;                                   #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; lindex list-key 1     # 使用LINDEX可以从列表里面取出单个元素。</span>
+<span class="sd">&quot;item2&quot;                                     #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; lpop list-key         # 从列表里面弹出一个元素，被弹出的元素不再存在于列表。</span>
+<span class="sd">&quot;item&quot;                                      #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; lrange list-key 0 -1  #</span>
+<span class="sd">1) &quot;item2&quot;                                  #</span>
+<span class="sd">2) &quot;item&quot;                                   #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; </span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+
+<span class="c"># 代码清单 1-3</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">redis 127.0.0.1:6379&gt; sadd set-key item     # 在尝试将一个元素添加到集合的时候，</span>
+<span class="sd">(integer) 1                                 # 命令返回1表示这个元素被成功地添加到了集合里面，</span>
+<span class="sd">redis 127.0.0.1:6379&gt; sadd set-key item2    # 而返回0则表示这个元素已经存在于集合中。</span>
+<span class="sd">(integer) 1                                 #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; sadd set-key item3    #</span>
+<span class="sd">(integer) 1                                 #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; sadd set-key item     #</span>
+<span class="sd">(integer) 0                                 #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; smembers set-key      # 获取集合包含的所有元素将得到一个由元素组成的序列，</span>
+<span class="sd">1) &quot;item&quot;                                   # Python客户端会将这个序列转换成Python集合。</span>
+<span class="sd">2) &quot;item2&quot;                                  #</span>
+<span class="sd">3) &quot;item3&quot;                                  #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; sismember set-key item4   # 检查一个元素是否存在于集合中，</span>
+<span class="sd">(integer) 0                                     # Python客户端会返回一个布尔值来表示检查结果。</span>
+<span class="sd">redis 127.0.0.1:6379&gt; sismember set-key item    #</span>
+<span class="sd">(integer) 1                                     #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; srem set-key item2    # 在使用命令移除集合中的元素时，命令会返回被移除的元素数量。</span>
+<span class="sd">(integer) 1                                 #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; srem set-key item2    #</span>
+<span class="sd">(integer) 0                                 #</span>
+<span class="sd">redis 127.0.0.1:6379&gt;  smembers set-key</span>
+<span class="sd">1) &quot;item&quot;</span>
+<span class="sd">2) &quot;item3&quot;</span>
+<span class="sd">redis 127.0.0.1:6379&gt; </span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+
+<span class="c"># 代码清单 1-4</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">redis 127.0.0.1:6379&gt; hset hash-key sub-key1 value1 # 在尝试添加键值对到散列的时候，</span>
+<span class="sd">(integer) 1                                         # 命令会返回一个值来表示给定的键是否已经存在于散列里面。</span>
+<span class="sd">redis 127.0.0.1:6379&gt; hset hash-key sub-key2 value2 #</span>
+<span class="sd">(integer) 1                                         #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; hset hash-key sub-key1 value1 #</span>
+<span class="sd">(integer) 0                                         #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; hgetall hash-key              # 获取散列包含的所有键值对，</span>
+<span class="sd">1) &quot;sub-key1&quot;                                       # Python客户端会将这些键值对转换为Python字典。</span>
+<span class="sd">2) &quot;value1&quot;                                         #</span>
+<span class="sd">3) &quot;sub-key2&quot;                                       #</span>
+<span class="sd">4) &quot;value2&quot;                                         #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; hdel hash-key sub-key2        # 在删除键值对的时候，</span>
+<span class="sd">(integer) 1                                         # 命令会返回一个值来表示给定的键在移除之前是否存在于散列里面。</span>
+<span class="sd">redis 127.0.0.1:6379&gt; hdel hash-key sub-key2        #</span>
+<span class="sd">(integer) 0                                         #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; hget hash-key sub-key1        # 从散列里面单独取出一个域。</span>
+<span class="sd">&quot;value1&quot;                                            #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; hgetall hash-key</span>
+<span class="sd">1) &quot;sub-key1&quot;</span>
+<span class="sd">2) &quot;value1&quot;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+
+<span class="c"># 代码清单 1-5 </span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">redis 127.0.0.1:6379&gt; zadd zset-key 728 member1     # 在尝试向有序集合添加元素的时候，</span>
+<span class="sd">(integer) 1                                         # 命令会返回新添加元素的数量。</span>
+<span class="sd">redis 127.0.0.1:6379&gt; zadd zset-key 982 member0     #</span>
+<span class="sd">(integer) 1                                         #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; zadd zset-key 982 member0     #</span>
+<span class="sd">(integer) 0                                         #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores   # 获取有序集合包含的所有元素，</span>
+<span class="sd">1) &quot;member1&quot;                                            # 这些元素会按照分值进行排序，</span>
+<span class="sd">2) &quot;728&quot;                                                # Python客户端会将这些分值转换成浮点数。</span>
+<span class="sd">3) &quot;member0&quot;                                            #</span>
+<span class="sd">4) &quot;982&quot;                                                #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; zrangebyscore zset-key 0 800 withscores   # 也可以根据分值来获取有序集合的其中一部分元素。</span>
+<span class="sd">1) &quot;member1&quot;                                                    #</span>
+<span class="sd">2) &quot;728&quot;                                                        #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; zrem zset-key member1     # 在移除有序集合元素的时候，</span>
+<span class="sd">(integer) 1                                     # 命令会返回被移除元素的数量。</span>
+<span class="sd">redis 127.0.0.1:6379&gt; zrem zset-key member1     #</span>
+<span class="sd">(integer) 0                                     #</span>
+<span class="sd">redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores</span>
+<span class="sd">1) &quot;member0&quot;</span>
+<span class="sd">2) &quot;982&quot;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+
+<span class="c"># 代码清单 1-6</span>
+<span class="c"># &lt;start id=&quot;upvote-code&quot;/&gt;</span>
+<span class="c"># 准备好需要用到的常量。</span>
+<span class="n">ONE_WEEK_IN_SECONDS</span> <span class="o">=</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">86400</span>
+<span class="n">VOTE_SCORE</span> <span class="o">=</span> <span class="mi">432</span>
+
+<span class="k">def</span> <span class="nf">article_vote</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">article</span><span class="p">):</span>
+
+    <span class="c"># 计算文章的投票截止时间。</span>
+    <span class="n">cutoff</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">ONE_WEEK_IN_SECONDS</span>
+
+    <span class="c"># 检查是否还可以对文章进行投票</span>
+    <span class="c">#（虽然使用散列也可以获取文章的发布时间，</span>
+    <span class="c"># 但有序集合返回的文章发布时间为浮点数，</span>
+    <span class="c"># 可以不进行转换直接使用）。</span>
+    <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;time:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">cutoff</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="c"># 从article:id标识符（identifier）里面取出文章的ID。</span>
+    <span class="n">article_id</span> <span class="o">=</span> <span class="n">article</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="c"># 如果用户是第一次为这篇文章投票，那么增加这篇文章的投票数量和评分。</span>
+    <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;voted:&#39;</span> <span class="o">+</span> <span class="n">article_id</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="s">&#39;score:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">VOTE_SCORE</span><span class="p">)</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">article</span><span class="p">,</span> <span class="s">&#39;votes&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;upvote-code&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 1-7</span>
+<span class="c"># &lt;start id=&quot;post-article-code&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">post_article</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">link</span><span class="p">):</span>
+    <span class="c"># 生成一个新的文章ID。</span>
+    <span class="n">article_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;article:&#39;</span><span class="p">))</span>
+
+    <span class="n">voted</span> <span class="o">=</span> <span class="s">&#39;voted:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
+    <span class="c"># 将发布文章的用户添加到文章的已投票用户名单里面，</span>
+    <span class="c"># 然后将这个名单的过期时间设置为一周（第3章将对过期时间作更详细的介绍）。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">voted</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">voted</span><span class="p">,</span> <span class="n">ONE_WEEK_IN_SECONDS</span><span class="p">)</span>
+
+    <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">article</span> <span class="o">=</span> <span class="s">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
+    <span class="c"># 将文章信息存储到一个散列里面。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">hmset</span><span class="p">(</span><span class="n">article</span><span class="p">,</span> <span class="p">{</span>
+        <span class="s">&#39;title&#39;</span><span class="p">:</span> <span class="n">title</span><span class="p">,</span>
+        <span class="s">&#39;link&#39;</span><span class="p">:</span> <span class="n">link</span><span class="p">,</span>
+        <span class="s">&#39;poster&#39;</span><span class="p">:</span> <span class="n">user</span><span class="p">,</span>
+        <span class="s">&#39;time&#39;</span><span class="p">:</span> <span class="n">now</span><span class="p">,</span>
+        <span class="s">&#39;votes&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="p">})</span>
+
+    <span class="c"># 将文章添加到根据发布时间排序的有序集合和根据评分排序的有序集合里面。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;score:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">VOTE_SCORE</span><span class="p">)</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;time:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">now</span><span class="p">)</span> 
+
+    <span class="k">return</span> <span class="n">article_id</span>
+<span class="c"># &lt;end id=&quot;post-article-code&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 1-8</span>
+<span class="c"># &lt;start id=&quot;fetch-articles-code&quot;/&gt;</span>
+<span class="n">ARTICLES_PER_PAGE</span> <span class="o">=</span> <span class="mi">25</span>
+
+<span class="k">def</span> <span class="nf">get_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s">&#39;score:&#39;</span><span class="p">):</span>
+    <span class="c"># 设置获取文章的起始索引和结束索引。</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="p">(</span><span class="n">page</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">ARTICLES_PER_PAGE</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">ARTICLES_PER_PAGE</span> <span class="o">-</span> <span class="mi">1</span>
+
+    <span class="c"># 获取多个文章ID。</span>
+    <span class="n">ids</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrevrange</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>
+    <span class="n">articles</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="c"># 根据文章ID获取文章的详细信息。</span>
+    <span class="k">for</span> <span class="nb">id</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">:</span>
+        <span class="n">article_data</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="nb">id</span><span class="p">)</span>
+        <span class="n">article_data</span><span class="p">[</span><span class="s">&#39;id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">id</span>
+        <span class="n">articles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">article_data</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">articles</span>
+<span class="c"># &lt;end id=&quot;fetch-articles-code&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 1-9</span>
+<span class="c"># &lt;start id=&quot;add-remove-groups&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">add_remove_groups</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">article_id</span><span class="p">,</span> <span class="n">to_add</span><span class="o">=</span><span class="p">[],</span> <span class="n">to_remove</span><span class="o">=</span><span class="p">[]):</span>
+    <span class="c"># 构建存储文章信息的键名。</span>
+    <span class="n">article</span> <span class="o">=</span> <span class="s">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
+    <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">to_add</span><span class="p">:</span>
+        <span class="c"># 将文章添加到它所属的群组里面。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">to_remove</span><span class="p">:</span>
+        <span class="c"># 从群组里面移除文章。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">srem</span><span class="p">(</span><span class="s">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;add-remove-groups&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 1-10</span>
+<span class="c"># &lt;start id=&quot;fetch-articles-group&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">get_group_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s">&#39;score:&#39;</span><span class="p">):</span>
+    <span class="c"># 为每个群组的每种排列顺序都创建一个键。</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">order</span> <span class="o">+</span> <span class="n">group</span>
+    <span class="c"># 检查是否有已缓存的排序结果，如果没有的话就现在进行排序。</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">conn</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">key</span><span class="p">):</span> 
+        <span class="c"># 根据评分或者发布时间，对群组文章进行排序。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">zinterstore</span><span class="p">(</span><span class="n">key</span><span class="p">,</span>
+            <span class="p">[</span><span class="s">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">order</span><span class="p">],</span>
+            <span class="n">aggregate</span><span class="o">=</span><span class="s">&#39;max&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c"># 让Redis在60秒钟之后自动删除这个有序集合。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span>
+    <span class="c"># 调用之前定义的get_articles()函数来进行分页并获取文章数据。</span>
+    <span class="k">return</span> <span class="n">get_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;fetch-articles-group&quot;/&gt;</span>
+
+<span class="c">#--------------- 以下是用于测试代码的辅助函数 --------------------------------</span>
+
+<span class="k">class</span> <span class="nc">TestCh01</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">redis</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">tearDown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+        <span class="k">print</span>
+        <span class="k">print</span>
+
+    <span class="k">def</span> <span class="nf">test_article_functionality</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+        <span class="kn">import</span> <span class="nn">pprint</span>
+
+        <span class="n">article_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">post_article</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;username&#39;</span><span class="p">,</span> <span class="s">&#39;A title&#39;</span><span class="p">,</span> <span class="s">&#39;http://www.google.com&#39;</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;We posted a new article with id:&quot;</span><span class="p">,</span> <span class="n">article_id</span>
+        <span class="k">print</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">article_id</span><span class="p">)</span>
+
+        <span class="k">print</span> <span class="s">&quot;Its HASH looks like:&quot;</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="s">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span><span class="p">)</span>
+        <span class="k">print</span> <span class="n">r</span>
+        <span class="k">print</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+        <span class="n">article_vote</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;other_user&#39;</span><span class="p">,</span> <span class="s">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;We voted for the article, it now has votes:&quot;</span><span class="p">,</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="s">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span><span class="p">,</span> <span class="s">&#39;votes&#39;</span><span class="p">))</span>
+        <span class="k">print</span> <span class="n">v</span>
+        <span class="k">print</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">v</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">print</span> <span class="s">&quot;The currently highest-scoring articles are:&quot;</span>
+        <span class="n">articles</span> <span class="o">=</span> <span class="n">get_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">articles</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">articles</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">add_remove_groups</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">article_id</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;new-group&#39;</span><span class="p">])</span>
+        <span class="k">print</span> <span class="s">&quot;We added the article to a new group, other articles include:&quot;</span>
+        <span class="n">articles</span> <span class="o">=</span> <span class="n">get_group_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;new-group&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">articles</span><span class="p">)</span>
+        <span class="k">print</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">articles</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">to_del</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;time:*&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;voted:*&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;score:*&#39;</span><span class="p">)</span> <span class="o">+</span> 
+            <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;article:*&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;group:*&#39;</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">to_del</span><span class="p">:</span>
+            <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="o">*</span><span class="n">to_del</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="chapter2.html" title="第 2 章相关源代码"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="../preview/appendx-b.html" title="附录B 其他资源和参考资料"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

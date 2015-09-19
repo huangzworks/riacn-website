@@ -1,0 +1,1173 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 6 章相关源代码 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="../index.html" />
+    <link rel="next" title="第 7 章相关源代码" href="chapter7.html" />
+    <link rel="prev" title="第 5 章相关源代码" href="chapter5.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chapter7.html" title="第 7 章相关源代码"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chapter5.html" title="第 5 章相关源代码"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 6 章相关源代码<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="kn">import</span> <span class="nn">bisect</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span><span class="p">,</span> <span class="n">deque</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">unittest</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">import</span> <span class="nn">zlib</span>
+
+<span class="kn">import</span> <span class="nn">redis</span>
+
+<span class="n">QUIT</span> <span class="o">=</span> <span class="bp">False</span>
+<span class="n">pipe</span> <span class="o">=</span> <span class="n">inv</span> <span class="o">=</span> <span class="n">item</span> <span class="o">=</span> <span class="n">buyer</span> <span class="o">=</span> <span class="n">seller</span> <span class="o">=</span> <span class="n">inventory</span> <span class="o">=</span> <span class="bp">None</span>
+
+
+<span class="c"># 代码清单 6-1</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8380&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">add_update_contact</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">contact</span><span class="p">):</span>
+    <span class="n">ac_list</span> <span class="o">=</span> <span class="s">&#39;recent:&#39;</span> <span class="o">+</span> <span class="n">user</span>
+    <span class="c"># 准备执行原子操作。</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span> 
+    <span class="c"># 如果联系人已经存在，那么移除他。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">lrem</span><span class="p">(</span><span class="n">ac_list</span><span class="p">,</span> <span class="n">contact</span><span class="p">)</span> 
+    <span class="c"># 将联系人推入到列表的最前端。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">lpush</span><span class="p">(</span><span class="n">ac_list</span><span class="p">,</span> <span class="n">contact</span><span class="p">)</span> 
+    <span class="c"># 只保留列表里面的前100个联系人。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">ltrim</span><span class="p">(</span><span class="n">ac_list</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">99</span><span class="p">)</span>   
+    <span class="c"># 实际地执行以上操作。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>               
+<span class="c"># &lt;end id=&quot;_1314_14473_8380&quot;/&gt;</span>
+
+
+<span class="c"># &lt;start id=&quot;_1314_14473_8383&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">remove_contact</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">contact</span><span class="p">):</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">lrem</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span> <span class="o">+</span> <span class="n">user</span><span class="p">,</span> <span class="n">contact</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_8383&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-2</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8386&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">fetch_autocomplete_list</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+    <span class="c"># 获取自动补完列表。</span>
+    <span class="n">candidates</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">lrange</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span> <span class="o">+</span> <span class="n">user</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> 
+    <span class="n">matches</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="c"># 检查每个候选联系人。</span>
+    <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>                    
+        <span class="k">if</span> <span class="n">candidate</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">):</span>  
+            <span class="c"># 发现一个匹配的联系人。</span>
+            <span class="n">matches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>         
+    <span class="c"># 返回所有匹配的联系人。</span>
+    <span class="k">return</span> <span class="n">matches</span>                           
+<span class="c"># &lt;end id=&quot;_1314_14473_8386&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-3</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8396&quot;/&gt;</span>
+<span class="c"># 准备一个由已知字符组成的列表。</span>
+<span class="n">valid_characters</span> <span class="o">=</span> <span class="s">&#39;`abcdefghijklmnopqrstuvwxyz{&#39;</span>     
+
+<span class="k">def</span> <span class="nf">find_prefix_range</span><span class="p">(</span><span class="n">prefix</span><span class="p">):</span>
+    <span class="c"># 在字符列表中查找前缀字符所处的位置。</span>
+    <span class="n">posn</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="n">valid_characters</span><span class="p">,</span> <span class="n">prefix</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:])</span> 
+    <span class="c"># 找到前驱字符。</span>
+    <span class="n">suffix</span> <span class="o">=</span> <span class="n">valid_characters</span><span class="p">[(</span><span class="n">posn</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>  
+    <span class="c"># 返回范围。</span>
+    <span class="k">return</span> <span class="n">prefix</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">suffix</span> <span class="o">+</span> <span class="s">&#39;{&#39;</span><span class="p">,</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s">&#39;{&#39;</span>         
+<span class="c"># &lt;end id=&quot;_1314_14473_8396&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-4</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8399&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">autocomplete_on_prefix</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">guild</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+    <span class="c"># 根据给定的前缀计算出查找范围的起点和终点。</span>
+    <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">find_prefix_range</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span>              
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                       
+    <span class="n">start</span> <span class="o">+=</span> <span class="n">identifier</span>                                   
+    <span class="n">end</span> <span class="o">+=</span> <span class="n">identifier</span>                                    
+    <span class="n">zset_name</span> <span class="o">=</span> <span class="s">&#39;members:&#39;</span> <span class="o">+</span> <span class="n">guild</span>
+
+    <span class="c"># 将范围的起始元素和结束元素添加到有序集合里面。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">while</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">zset_name</span><span class="p">)</span>
+            <span class="c"># 找到两个被插入元素在有序集合中的排名。</span>
+            <span class="n">sindex</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">zrank</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">start</span><span class="p">)</span>      
+            <span class="n">eindex</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">zrank</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>      
+            <span class="n">erange</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">sindex</span> <span class="o">+</span> <span class="mi">9</span><span class="p">,</span> <span class="n">eindex</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>        
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>
+            <span class="c"># 获取范围内的值，然后删除之前插入的起始元素和结束元素。</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>         
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="n">zset_name</span><span class="p">,</span> <span class="n">sindex</span><span class="p">,</span> <span class="n">erange</span><span class="p">)</span>   
+            <span class="n">items</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>             
+            <span class="k">break</span>
+        <span class="c"># 如果自动补完有序集合已经被其他客户端修改过了，那么进行重试。</span>
+        <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span>               
+            <span class="k">continue</span>                                     
+
+    <span class="c"># 如果有其他自动补完操作正在执行，</span>
+    <span class="c"># 那么从获取到的元素里面移除起始元素和终结元素。</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">item</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span> <span class="k">if</span> <span class="s">&#39;{&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">item</span><span class="p">]</span>  
+<span class="c"># &lt;end id=&quot;_1314_14473_8399&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-5</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8403&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">join_guild</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">guild</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;members:&#39;</span> <span class="o">+</span> <span class="n">guild</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">leave_guild</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">guild</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;members:&#39;</span> <span class="o">+</span> <span class="n">guild</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_8403&quot;/&gt;</span>
+<span class="c">#END</span>
+
+
+<span class="c"># 代码清单 6-6</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8431&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">list_item</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">,</span> <span class="n">price</span><span class="p">):</span>
+    <span class="c">#...</span>
+            <span class="c"># 监视卖家包裹发生的变动。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">inv</span><span class="p">)</span>                            
+            <span class="c"># 确保被出售的物品仍然存在于卖家的包裹里面。</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">pipe</span><span class="o">.</span><span class="n">sismember</span><span class="p">(</span><span class="n">inv</span><span class="p">,</span> <span class="n">itemid</span><span class="p">):</span>        
+                <span class="n">pipe</span><span class="o">.</span><span class="n">unwatch</span><span class="p">()</span>                        
+                <span class="k">return</span> <span class="bp">None</span>
+
+            <span class="c"># 将物品添加到市场里面。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>                          
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">price</span><span class="p">)</span>     
+            <span class="n">pipe</span><span class="o">.</span><span class="n">srem</span><span class="p">(</span><span class="n">inv</span><span class="p">,</span> <span class="n">itemid</span><span class="p">)</span>                 
+            <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                         
+            <span class="k">return</span> <span class="bp">True</span>
+    <span class="c">#...</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_8431&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-7</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8435&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">purchase_item</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">buyerid</span><span class="p">,</span> <span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">,</span> <span class="n">lprice</span><span class="p">):</span>
+    <span class="c">#...</span>
+            <span class="c"># 监视市场以及买家个人信息发生的变化。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">buyer</span><span class="p">)</span>             
+
+            <span class="c"># 检查物品是否已经售出、物品的价格是否已经发生了变化，</span>
+            <span class="c"># 以及买家是否有足够的金钱来购买这件物品。</span>
+            <span class="n">price</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>     
+            <span class="n">funds</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">pipe</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="n">buyer</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">))</span>    
+            <span class="k">if</span> <span class="n">price</span> <span class="o">!=</span> <span class="n">lprice</span> <span class="ow">or</span> <span class="n">price</span> <span class="o">&gt;</span> <span class="n">funds</span><span class="p">:</span>     
+                <span class="n">pipe</span><span class="o">.</span><span class="n">unwatch</span><span class="p">()</span>                       
+                <span class="k">return</span> <span class="bp">None</span>
+
+            <span class="c"># 将买家支付的货款转移给卖家，并将被卖出的物品转移给买家。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>                              
+            <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">seller</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">price</span><span class="p">))</span> 
+            <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">buyerid</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="o">-</span><span class="n">price</span><span class="p">))</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">inventory</span><span class="p">,</span> <span class="n">itemid</span><span class="p">)</span>               
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>                 
+            <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                            
+            <span class="k">return</span> <span class="bp">True</span>
+
+    <span class="c">#...</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_8435&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-8</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8641&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">lockname</span><span class="p">,</span> <span class="n">acquire_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c"># 128位随机标识符。</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                     
+
+    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">acquire_timeout</span>
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
+        <span class="c"># 尝试取得锁。</span>
+        <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">setnx</span><span class="p">(</span><span class="s">&#39;lock:&#39;</span> <span class="o">+</span> <span class="n">lockname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span> 
+            <span class="k">return</span> <span class="n">identifier</span>
+
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">001</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="bp">False</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_8641&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-9</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8645&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">purchase_item_with_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">buyerid</span><span class="p">,</span> <span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">):</span>
+    <span class="n">buyer</span> <span class="o">=</span> <span class="s">&quot;users:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">buyerid</span>
+    <span class="n">seller</span> <span class="o">=</span> <span class="s">&quot;users:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">sellerid</span>
+    <span class="n">item</span> <span class="o">=</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">)</span>
+    <span class="n">inventory</span> <span class="o">=</span> <span class="s">&quot;inventory:</span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">buyerid</span>
+
+    <span class="c"># 尝试获取锁。</span>
+    <span class="n">locked</span> <span class="o">=</span> <span class="n">acquire_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;market:&#39;</span><span class="p">)</span>   
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">locked</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">False</span>
+
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># 检查物品是否已经售出，以及买家是否有足够的金钱来购买物品。</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>        
+        <span class="n">pipe</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="n">buyer</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">)</span>            
+        <span class="n">price</span><span class="p">,</span> <span class="n">funds</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>         
+        <span class="k">if</span> <span class="n">price</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">price</span> <span class="o">&gt;</span> <span class="n">funds</span><span class="p">:</span>   
+            <span class="k">return</span> <span class="bp">None</span>                     
+
+        <span class="c"># 将买家支付的货款转移给卖家，并将售出的物品转移给买家。</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">seller</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">price</span><span class="p">))</span> 
+        <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">buyer</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="o">-</span><span class="n">price</span><span class="p">))</span> 
+        <span class="n">pipe</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">inventory</span><span class="p">,</span> <span class="n">itemid</span><span class="p">)</span>            
+        <span class="n">pipe</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>               
+        <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                           
+        <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="c"># 释放锁。</span>
+        <span class="n">release_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;market:&#39;</span><span class="p">,</span> <span class="n">locked</span><span class="p">)</span>   
+<span class="c"># &lt;end id=&quot;_1314_14473_8645&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-10</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8650&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">release_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">lockname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">lockname</span> <span class="o">=</span> <span class="s">&#39;lock:&#39;</span> <span class="o">+</span> <span class="n">lockname</span>
+
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c"># 检查并确认进程还持有着锁。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">lockname</span><span class="p">)</span>                  
+            <span class="k">if</span> <span class="n">pipe</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">lockname</span><span class="p">)</span> <span class="o">==</span> <span class="n">identifier</span><span class="p">:</span>  
+                <span class="c"># 释放锁。</span>
+                <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>                  
+                <span class="n">pipe</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">lockname</span><span class="p">)</span>      
+                <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>             
+                <span class="k">return</span> <span class="bp">True</span>                    
+
+            <span class="n">pipe</span><span class="o">.</span><span class="n">unwatch</span><span class="p">()</span>
+            <span class="k">break</span>
+
+        <span class="c"># 有其他客户端修改了锁；重试。</span>
+        <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span>     
+            <span class="k">pass</span>                                 
+
+    <span class="c"># 进程已经失去了锁。</span>
+    <span class="k">return</span> <span class="bp">False</span>                                
+<span class="c"># &lt;end id=&quot;_1314_14473_8650&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-11</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8790&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_lock_with_timeout</span><span class="p">(</span>
+    <span class="n">conn</span><span class="p">,</span> <span class="n">lockname</span><span class="p">,</span> <span class="n">acquire_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">lock_timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c"># 128位随机标识符。</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                   
+    <span class="n">lockname</span> <span class="o">=</span> <span class="s">&#39;lock:&#39;</span> <span class="o">+</span> <span class="n">lockname</span>
+    <span class="c"># 确保传给EXPIRE的都是整数。</span>
+    <span class="n">lock_timeout</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">lock_timeout</span><span class="p">))</span>     
+
+    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">acquire_timeout</span>
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
+        <span class="c"># 获取锁并设置过期时间。</span>
+        <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">setnx</span><span class="p">(</span><span class="n">lockname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>        
+            <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">lockname</span><span class="p">,</span> <span class="n">lock_timeout</span><span class="p">)</span>    
+            <span class="k">return</span> <span class="n">identifier</span>
+        <span class="c"># 检查过期时间，并在有需要时对其进行更新。</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">conn</span><span class="o">.</span><span class="n">ttl</span><span class="p">(</span><span class="n">lockname</span><span class="p">):</span>                 
+            <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">lockname</span><span class="p">,</span> <span class="n">lock_timeout</span><span class="p">)</span>   
+
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">001</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="bp">False</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_8790&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-12 </span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8986&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c"># 128位随机标识符。</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                         
+    <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 清理过期的信号量持有者。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="s">&#39;-inf&#39;</span><span class="p">,</span> <span class="n">now</span> <span class="o">-</span> <span class="n">timeout</span><span class="p">)</span> 
+    <span class="c"># 尝试获取信号量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">now</span><span class="p">)</span>                 
+    <span class="c"># 检查是否成功取得了信号量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrank</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>              
+    <span class="k">if</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">limit</span><span class="p">:</span>                        
+        <span class="k">return</span> <span class="n">identifier</span>
+
+    <span class="c"># 获取信号量失败，删除之前添加的标识符。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>                            
+    <span class="k">return</span> <span class="bp">None</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_8986&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-13</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_8990&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">release_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>
+    <span class="c"># 如果信号量已经被正确地释放，那么返回True；</span>
+    <span class="c"># 返回False则表示该信号量已经因为过期而被删除了。</span>
+    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>                   
+<span class="c"># &lt;end id=&quot;_1314_14473_8990&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-14</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9004&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_fair_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c"># 128位随机标识符。</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                           
+    <span class="n">czset</span> <span class="o">=</span> <span class="n">semname</span> <span class="o">+</span> <span class="s">&#39;:owner&#39;</span>
+    <span class="n">ctr</span> <span class="o">=</span> <span class="n">semname</span> <span class="o">+</span> <span class="s">&#39;:counter&#39;</span>
+
+    <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 删除超时的信号量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="s">&#39;-inf&#39;</span><span class="p">,</span> <span class="n">now</span> <span class="o">-</span> <span class="n">timeout</span><span class="p">)</span>  
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zinterstore</span><span class="p">(</span><span class="n">czset</span><span class="p">,</span> <span class="p">{</span><span class="n">czset</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="n">semname</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>      
+
+    <span class="c"># 对计数器执行自增操作，并获取操作执行之后的值。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="n">ctr</span><span class="p">)</span>                                       
+    <span class="n">counter</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>                         
+
+    <span class="c"># 尝试获取信号量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">now</span><span class="p">)</span>                   
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">czset</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">counter</span><span class="p">)</span>                
+
+    <span class="c"># 通过检查排名来判断客户端是否取得了信号量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrank</span><span class="p">(</span><span class="n">czset</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>                         
+    <span class="k">if</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">limit</span><span class="p">:</span>                       
+        <span class="c"># 客户端成功取得了信号量。</span>
+        <span class="k">return</span> <span class="n">identifier</span>                                    
+
+    <span class="c"># 客户端未能取得信号量，清理无用数据。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>                        
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">czset</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>                         
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+    <span class="k">return</span> <span class="bp">None</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9004&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-15</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9014&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">release_fair_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="n">semname</span> <span class="o">+</span> <span class="s">&#39;:owner&#39;</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>
+    <span class="c"># 返回True表示信号量已被正确地释放，</span>
+    <span class="c"># 返回False则表示想要释放的信号量已经因为超时而被删除了。</span>
+    <span class="k">return</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>                             
+<span class="c"># &lt;end id=&quot;_1314_14473_9014&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-16</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9022&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">refresh_fair_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span>
+    <span class="c"># 更新客户端持有的信号量。</span>
+    <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()):</span>          
+        <span class="c"># 告知调用者，客户端已经失去了信号量。</span>
+        <span class="n">release_fair_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>   
+        <span class="k">return</span> <span class="bp">False</span>                                      
+    <span class="c"># 客户端仍然持有信号量。</span>
+    <span class="k">return</span> <span class="bp">True</span>                                              
+<span class="c"># &lt;end id=&quot;_1314_14473_9022&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-17</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9031&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">acquire_semaphore_with_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="n">acquire_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">acquire_timeout</span><span class="o">=.</span><span class="mo">01</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">identifier</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">acquire_fair_semaphore</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">timeout</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">release_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">semname</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9031&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-18</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9056&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">send_sold_email_via_queue</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">seller</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">price</span><span class="p">,</span> <span class="n">buyer</span><span class="p">):</span>
+    <span class="c"># 准备好待发送邮件。</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s">&#39;seller_id&#39;</span><span class="p">:</span> <span class="n">seller</span><span class="p">,</span>                 
+        <span class="s">&#39;item_id&#39;</span><span class="p">:</span> <span class="n">item</span><span class="p">,</span>                      
+        <span class="s">&#39;price&#39;</span><span class="p">:</span> <span class="n">price</span><span class="p">,</span>                         
+        <span class="s">&#39;buyer_id&#39;</span><span class="p">:</span> <span class="n">buyer</span><span class="p">,</span>                      
+        <span class="s">&#39;time&#39;</span><span class="p">:</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>                    
+    <span class="p">}</span>
+    <span class="c"># 将待发送邮件推入到队列里面。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">rpush</span><span class="p">(</span><span class="s">&#39;queue:email&#39;</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">))</span> 
+<span class="c"># &lt;end id=&quot;_1314_14473_9056&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-19</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9060&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">process_sold_email_queue</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
+    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
+        <span class="c"># 尝试获取一封待发送邮件。</span>
+        <span class="n">packed</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">blpop</span><span class="p">([</span><span class="s">&#39;queue:email&#39;</span><span class="p">],</span> <span class="mi">30</span><span class="p">)</span>                  
+        <span class="c"># 队列里面暂时还没有待发送邮件，重试。</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">packed</span><span class="p">:</span>                                          
+            <span class="k">continue</span>
+
+        <span class="c"># 从JSON对象中解码出邮件信息。</span>
+        <span class="n">to_send</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">packed</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>                       
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c"># 使用预先编写好的邮件发送函数来发送邮件。</span>
+            <span class="n">fetch_data_and_send_sold_email</span><span class="p">(</span><span class="n">to_send</span><span class="p">)</span>            
+        <span class="k">except</span> <span class="n">EmailSendError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="n">log_error</span><span class="p">(</span><span class="s">&quot;Failed to send sold email&quot;</span><span class="p">,</span> <span class="n">err</span><span class="p">,</span> <span class="n">to_send</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log_success</span><span class="p">(</span><span class="s">&quot;Sent sold email&quot;</span><span class="p">,</span> <span class="n">to_send</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9060&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-20</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9066&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">worker_watch_queue</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">queue</span><span class="p">,</span> <span class="n">callbacks</span><span class="p">):</span>
+    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
+        <span class="c"># 尝试从队列里面取出一项待执行任务。</span>
+        <span class="n">packed</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">blpop</span><span class="p">([</span><span class="n">queue</span><span class="p">],</span> <span class="mi">30</span><span class="p">)</span>                   
+        <span class="c"># 队列为空，没有任务需要执行；重试。</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">packed</span><span class="p">:</span>                                     
+            <span class="k">continue</span>                                      
+
+        <span class="c"># 解码任务信息。</span>
+        <span class="n">name</span><span class="p">,</span> <span class="n">args</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">packed</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>                
+        <span class="c"># 没有找到任务指定的回调函数，用日志记录错误并重试。</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">callbacks</span><span class="p">:</span>                         
+            <span class="n">log_error</span><span class="p">(</span><span class="s">&quot;Unknown callback </span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="n">name</span><span class="p">)</span>        
+            <span class="k">continue</span>                                      
+        <span class="c"># 执行任务。</span>
+        <span class="n">callbacks</span><span class="p">[</span><span class="n">name</span><span class="p">](</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>                            
+<span class="c"># &lt;end id=&quot;_1314_14473_9066&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-21</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9074&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">worker_watch_queues</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">queues</span><span class="p">,</span> <span class="n">callbacks</span><span class="p">):</span>   <span class="c"># 实现优先级特性要修改的第一行代码。</span>
+    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
+        <span class="n">packed</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">blpop</span><span class="p">(</span><span class="n">queues</span><span class="p">,</span> <span class="mi">30</span><span class="p">)</span>             <span class="c"># 实现优先级特性要修改的第二行代码。</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">packed</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">name</span><span class="p">,</span> <span class="n">args</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">packed</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">callbacks</span><span class="p">:</span>
+            <span class="n">log_error</span><span class="p">(</span><span class="s">&quot;Unknown callback </span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">callbacks</span><span class="p">[</span><span class="n">name</span><span class="p">](</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9074&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-22</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9094&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">execute_later</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">queue</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">args</span><span class="p">,</span> <span class="n">delay</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="c"># 创建唯一标识符。</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                        
+    <span class="c"># 准备好需要入队的任务。</span>
+    <span class="n">item</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="n">identifier</span><span class="p">,</span> <span class="n">queue</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">args</span><span class="p">])</span>  
+    <span class="k">if</span> <span class="n">delay</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c"># 延迟执行这个任务。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;delayed:&#39;</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">delay</span><span class="p">)</span> 
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># 立即执行这个任务。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">rpush</span><span class="p">(</span><span class="s">&#39;queue:&#39;</span> <span class="o">+</span> <span class="n">queue</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>                 
+    <span class="c"># 返回标识符。</span>
+    <span class="k">return</span> <span class="n">identifier</span>                                    
+<span class="c"># &lt;end id=&quot;_1314_14473_9094&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-23</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9099&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">poll_queue</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
+    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
+        <span class="c"># 获取队列中的第一个任务。</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;delayed:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>   
+        <span class="c"># 队列没有包含任何任务，或者任务的执行时间未到。</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">item</span> <span class="ow">or</span> <span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">():</span>               
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">01</span><span class="p">)</span>                                    
+            <span class="k">continue</span>                                            
+
+        <span class="c"># 解码要被执行的任务，弄清楚它应该被推入到哪个任务队列里面。</span>
+        <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>                                      
+        <span class="n">identifier</span><span class="p">,</span> <span class="n">queue</span><span class="p">,</span> <span class="n">function</span><span class="p">,</span> <span class="n">args</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>   
+
+        <span class="c"># 为了对任务进行移动，尝试获取锁。</span>
+        <span class="n">locked</span> <span class="o">=</span> <span class="n">acquire_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>                
+        <span class="c"># 获取锁失败，跳过后续步骤并重试。</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">locked</span><span class="p">:</span>                                         
+            <span class="k">continue</span>                                          
+
+        <span class="c"># 将任务推入到适当的任务队列里面。</span>
+        <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;delayed:&#39;</span><span class="p">,</span> <span class="n">item</span><span class="p">):</span>                       
+            <span class="n">conn</span><span class="o">.</span><span class="n">rpush</span><span class="p">(</span><span class="s">&#39;queue:&#39;</span> <span class="o">+</span> <span class="n">queue</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>                 
+
+        <span class="c"># 释放锁。</span>
+        <span class="n">release_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">locked</span><span class="p">)</span>                 
+<span class="c"># &lt;end id=&quot;_1314_14473_9099&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-24</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9124&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">create_chat</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">sender</span><span class="p">,</span> <span class="n">recipients</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">chat_id</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="c"># 获得新的群组ID。</span>
+    <span class="n">chat_id</span> <span class="o">=</span> <span class="n">chat_id</span> <span class="ow">or</span> <span class="nb">str</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;ids:chat:&#39;</span><span class="p">))</span>     
+
+    <span class="c"># 创建一个由用户和分值组成的字典，字典里面的信息将被添加到有序集合里面。</span>
+    <span class="n">recipients</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sender</span><span class="p">)</span>                           
+    <span class="n">recipientsd</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">r</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">recipients</span><span class="p">)</span>       
+
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 将所有参与群聊的用户添加到有序集合里面。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="o">**</span><span class="n">recipientsd</span><span class="p">)</span>      
+    <span class="c"># 初始化已读有序集合。</span>
+    <span class="k">for</span> <span class="n">rec</span> <span class="ow">in</span> <span class="n">recipients</span><span class="p">:</span>                                
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;seen:&#39;</span> <span class="o">+</span> <span class="n">rec</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>          
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+    <span class="c"># 发送消息。</span>
+    <span class="k">return</span> <span class="n">send_message</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">sender</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>  
+<span class="c"># &lt;end id=&quot;_1314_14473_9124&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-25</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9127&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">send_message</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">sender</span><span class="p">,</span> <span class="n">message</span><span class="p">):</span>
+    <span class="n">identifier</span> <span class="o">=</span> <span class="n">acquire_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">identifier</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&quot;Couldn&#39;t get the lock&quot;</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># 筹备待发送的消息。</span>
+        <span class="n">mid</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;ids:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">)</span> 
+        <span class="n">ts</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>                                 
+        <span class="n">packed</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span>                            
+            <span class="s">&#39;id&#39;</span><span class="p">:</span> <span class="n">mid</span><span class="p">,</span>                                   
+            <span class="s">&#39;ts&#39;</span><span class="p">:</span> <span class="n">ts</span><span class="p">,</span>                                   
+            <span class="s">&#39;sender&#39;</span><span class="p">:</span> <span class="n">sender</span><span class="p">,</span>                           
+            <span class="s">&#39;message&#39;</span><span class="p">:</span> <span class="n">message</span><span class="p">,</span>                         
+        <span class="p">})</span>                                              
+
+        <span class="c"># 将消息发送至群组。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;msgs:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">packed</span><span class="p">,</span> <span class="n">mid</span><span class="p">)</span>     
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">release_lock</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">chat_id</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9127&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-26</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9132&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">fetch_pending_messages</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">recipient</span><span class="p">):</span>
+    <span class="c"># 获取最后接收到的消息的ID。</span>
+    <span class="n">seen</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;seen:&#39;</span> <span class="o">+</span> <span class="n">recipient</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span> 
+
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+
+    <span class="c"># 获取所有未读消息。</span>
+    <span class="k">for</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">seen_id</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>                              
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zrangebyscore</span><span class="p">(</span>                              
+            <span class="s">&#39;msgs:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">seen_id</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="s">&#39;inf&#39;</span><span class="p">)</span>               
+    <span class="c"># 这些数据将被返回给函数调用者。</span>
+    <span class="n">chat_info</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="n">seen</span><span class="p">,</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">())</span>                 
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">((</span><span class="n">chat_id</span><span class="p">,</span> <span class="n">seen_id</span><span class="p">),</span> <span class="n">messages</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">chat_info</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">messages</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">messages</span><span class="p">[:]</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">,</span> <span class="n">messages</span><span class="p">)</span>
+        <span class="c"># 使用最新收到的消息来更新群组有序集合。</span>
+        <span class="n">seen_id</span> <span class="o">=</span> <span class="n">messages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s">&#39;id&#39;</span><span class="p">]</span>                         
+        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">recipient</span><span class="p">,</span> <span class="n">seen_id</span><span class="p">)</span>       
+
+        <span class="c"># 找出那些所有人都已经阅读过的消息。</span>
+        <span class="n">min_id</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span>                                
+            <span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>          
+
+        <span class="c"># 更新已读消息有序集合。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;seen:&#39;</span> <span class="o">+</span> <span class="n">recipient</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">seen_id</span><span class="p">)</span>   
+        <span class="k">if</span> <span class="n">min_id</span><span class="p">:</span>
+            <span class="c"># 清除那些已经被所有人阅读过的消息。</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span>                        
+                <span class="s">&#39;msgs:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">min_id</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>             
+        <span class="n">chat_info</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">chat_id</span><span class="p">,</span> <span class="n">messages</span><span class="p">)</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">chat_info</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9132&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 2-27</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9135&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">join_chat</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="c"># 取得最新群组消息的ID。</span>
+    <span class="n">message_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;ids:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">))</span>            
+
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 将用户添加到群组成员列表里面。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">message_id</span><span class="p">)</span>         
+    <span class="c"># 将群组添加到用户的已读列表里面。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;seen:&#39;</span> <span class="o">+</span> <span class="n">user</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">message_id</span><span class="p">)</span>        
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9135&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 2-28</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9136&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">leave_chat</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 从群组里面移除给定的用户。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>                     
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;seen:&#39;</span> <span class="o">+</span> <span class="n">user</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">)</span>                     
+    <span class="c"># 查看群组剩余成员的数量。</span>
+    <span class="n">pipeline</span><span class="o">.</span><span class="n">zcard</span><span class="p">(</span><span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">)</span>                          
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+        <span class="c"># 删除群组。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;msgs:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">)</span>                    
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;ids:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">)</span>                     
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># 查找那些已经被所有成员阅读过的消息。</span>
+        <span class="n">oldest</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span>                                  
+            <span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>          
+        <span class="c"># 删除那些已经被所有成员阅读过的消息。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span><span class="s">&#39;chat:&#39;</span> <span class="o">+</span> <span class="n">chat_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">oldest</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>    
+<span class="c"># &lt;end id=&quot;_1314_14473_9136&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 2-29</span>
+<span class="c"># &lt;start id=&quot;_1314_15044_3669&quot;/&gt;</span>
+<span class="c"># 本地聚合数据字典。</span>
+<span class="n">aggregates</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">))</span>     
+
+<span class="k">def</span> <span class="nf">daily_country_aggregate</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">line</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">line</span><span class="p">:</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="c"># 提取日志行中的信息。</span>
+        <span class="n">ip</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>                                    
+        <span class="n">day</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>                                   
+        <span class="c"># 根据IP地址判断用户所在国家。</span>
+        <span class="n">country</span> <span class="o">=</span> <span class="n">find_city_by_ip_local</span><span class="p">(</span><span class="n">ip</span><span class="p">)[</span><span class="mi">2</span><span class="p">]</span>        
+        <span class="c"># 对本地聚合数据执行自增操作。</span>
+        <span class="n">aggregates</span><span class="p">[</span><span class="n">day</span><span class="p">][</span><span class="n">country</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>                  
+        <span class="k">return</span>
+
+    <span class="c"># 当天的日志文件已经处理完毕，将聚合计算的结果写入到Redis里面。</span>
+    <span class="k">for</span> <span class="n">day</span><span class="p">,</span> <span class="n">aggregate</span> <span class="ow">in</span> <span class="n">aggregates</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>          
+        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;daily:country:&#39;</span> <span class="o">+</span> <span class="n">day</span><span class="p">,</span> <span class="o">**</span><span class="n">aggregate</span><span class="p">)</span> 
+        <span class="k">del</span> <span class="n">aggregates</span><span class="p">[</span><span class="n">day</span><span class="p">]</span>                           
+<span class="c"># &lt;end id=&quot;_1314_15044_3669&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 2-30</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9209&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">copy_logs_to_redis</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                       <span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="o">**</span><span class="mi">30</span><span class="p">,</span> <span class="n">quit_when_done</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="n">bytes_in_redis</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">waiting</span> <span class="o">=</span> <span class="n">deque</span><span class="p">()</span>
+    <span class="c"># 创建用于向客户端发送消息的群组。</span>
+    <span class="n">create_chat</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;source&#39;</span><span class="p">,</span> <span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="n">count</span><span class="p">)),</span> <span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">channel</span><span class="p">)</span> 
+    <span class="n">count</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+    <span class="c"># 遍历所有日志文件。</span>
+    <span class="k">for</span> <span class="n">logfile</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">path</span><span class="p">)):</span>             
+        <span class="n">full_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">logfile</span><span class="p">)</span>
+
+        <span class="n">fsize</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">full_path</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span>
+        <span class="c"># 如果程序需要更多空间，那么清除已经处理完毕的文件。</span>
+        <span class="k">while</span> <span class="n">bytes_in_redis</span> <span class="o">+</span> <span class="n">fsize</span> <span class="o">&gt;</span> <span class="n">limit</span><span class="p">:</span>              
+            <span class="n">cleaned</span> <span class="o">=</span> <span class="n">_clean</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">waiting</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">cleaned</span><span class="p">:</span>                                  
+                <span class="n">bytes_in_redis</span> <span class="o">-=</span> <span class="n">cleaned</span>                
+            <span class="k">else</span><span class="p">:</span>                                       
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mi">25</span><span class="p">)</span>                          
+
+        <span class="c"># 将文件上传至Redis。</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">full_path</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">inp</span><span class="p">:</span>           
+            <span class="n">block</span> <span class="o">=</span> <span class="s">&#39; &#39;</span>                          
+            <span class="k">while</span> <span class="n">block</span><span class="p">:</span>                                 
+                <span class="n">block</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="mi">17</span><span class="p">)</span>                  
+                <span class="n">conn</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">channel</span><span class="o">+</span><span class="n">logfile</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span>      
+
+        <span class="c"># 提醒监听者，文件已经准备就绪。</span>
+        <span class="n">send_message</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="s">&#39;source&#39;</span><span class="p">,</span> <span class="n">logfile</span><span class="p">)</span>    
+
+        <span class="c"># 对本地记录的Redis内存占用量相关信息进行更新。</span>
+        <span class="n">bytes_in_redis</span> <span class="o">+=</span> <span class="n">fsize</span>                          
+        <span class="n">waiting</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">logfile</span><span class="p">,</span> <span class="n">fsize</span><span class="p">))</span>                  
+
+    <span class="c"># 所有日志文件已经处理完毕，向监听者报告此事。</span>
+    <span class="k">if</span> <span class="n">quit_when_done</span><span class="p">:</span>                                    
+        <span class="n">send_message</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="s">&#39;source&#39;</span><span class="p">,</span> <span class="s">&#39;:done&#39;</span><span class="p">)</span>    
+
+    <span class="c"># 在工作完成之后，清理无用的日志文件。</span>
+    <span class="k">while</span> <span class="n">waiting</span><span class="p">:</span>                                        
+        <span class="n">cleaned</span> <span class="o">=</span> <span class="n">_clean</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">waiting</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>   
+        <span class="k">if</span> <span class="n">cleaned</span><span class="p">:</span>                                       
+            <span class="n">bytes_in_redis</span> <span class="o">-=</span> <span class="n">cleaned</span>                     
+        <span class="k">else</span><span class="p">:</span>                                             
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mi">25</span><span class="p">)</span>                             
+
+<span class="c"># 对Redis进行清理的详细步骤。</span>
+<span class="k">def</span> <span class="nf">_clean</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">waiting</span><span class="p">,</span> <span class="n">count</span><span class="p">):</span>                
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">waiting</span><span class="p">:</span>                                        
+        <span class="k">return</span> <span class="mi">0</span>                                           
+    <span class="n">w0</span> <span class="o">=</span> <span class="n">waiting</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>                                     
+    <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">channel</span> <span class="o">+</span> <span class="n">w0</span> <span class="o">+</span> <span class="s">&#39;:done&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="n">count</span><span class="p">:</span>          
+        <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">channel</span> <span class="o">+</span> <span class="n">w0</span><span class="p">,</span> <span class="n">channel</span> <span class="o">+</span> <span class="n">w0</span> <span class="o">+</span> <span class="s">&#39;:done&#39;</span><span class="p">)</span>  
+        <span class="k">return</span> <span class="n">waiting</span><span class="o">.</span><span class="n">popleft</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>                        
+    <span class="k">return</span> <span class="mi">0</span>                                               
+<span class="c"># &lt;end id=&quot;_1314_14473_9209&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-31</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9213&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">process_logs_from_redis</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="n">callback</span><span class="p">):</span>
+    <span class="k">while</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c"># 获取文件列表。</span>
+        <span class="n">fdata</span> <span class="o">=</span> <span class="n">fetch_pending_messages</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="nb">id</span><span class="p">)</span>                    
+
+        <span class="k">for</span> <span class="n">ch</span><span class="p">,</span> <span class="n">mdata</span> <span class="ow">in</span> <span class="n">fdata</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">mdata</span><span class="p">:</span>
+                <span class="n">logfile</span> <span class="o">=</span> <span class="n">message</span><span class="p">[</span><span class="s">&#39;message&#39;</span><span class="p">]</span>
+
+                <span class="c"># 所有日志行已经处理完毕。</span>
+                <span class="k">if</span> <span class="n">logfile</span> <span class="o">==</span> <span class="s">&#39;:done&#39;</span><span class="p">:</span>                                
+                    <span class="k">return</span>                                            
+                <span class="k">elif</span> <span class="ow">not</span> <span class="n">logfile</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="c"># 选择一个块读取器（block reader）。</span>
+                <span class="n">block_reader</span> <span class="o">=</span> <span class="n">readblocks</span>                             
+                <span class="k">if</span> <span class="n">logfile</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;.gz&#39;</span><span class="p">):</span>                           
+                    <span class="n">block_reader</span> <span class="o">=</span> <span class="n">readblocks_gz</span>                      
+
+                <span class="c"># 遍历日志行。</span>
+                <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">readlines</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">ch</span><span class="o">+</span><span class="n">logfile</span><span class="p">,</span> <span class="n">block_reader</span><span class="p">):</span>
+                    <span class="c"># 将日志行传递给回调函数。</span>
+                    <span class="n">callback</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>                              
+                <span class="c"># 强制地刷新聚合数据缓存。</span>
+                <span class="n">callback</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>                                 
+
+                <span class="c"># 报告日志已经处理完毕。</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="n">ch</span> <span class="o">+</span> <span class="n">logfile</span> <span class="o">+</span> <span class="s">&#39;:done&#39;</span><span class="p">)</span>                    
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fdata</span><span class="p">:</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mi">1</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9213&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-32</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9221&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">readlines</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">rblocks</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+    <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">rblocks</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="n">out</span> <span class="o">+=</span> <span class="n">block</span>
+        <span class="c"># 查找位于文本最右端的断行符；如果断行符不存在，那么rfind()返回-1。</span>
+        <span class="n">posn</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">rfind</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>                      
+        <span class="c"># 找到一个断行符。</span>
+        <span class="k">if</span> <span class="n">posn</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>                               
+            <span class="c"># 根据断行符来分割日志行。</span>
+            <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">out</span><span class="p">[:</span><span class="n">posn</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">):</span>    
+                <span class="c"># 向调用者返回每个行。</span>
+                <span class="k">yield</span> <span class="n">line</span> <span class="o">+</span> <span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span>                  
+            <span class="c"># 保留余下的数据。</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="n">posn</span><span class="o">+</span><span class="mi">1</span><span class="p">:]</span>                     
+        <span class="c"># 所有数据块已经处理完毕。</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">block</span><span class="p">:</span>                              
+            <span class="k">yield</span> <span class="n">out</span>
+            <span class="k">break</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9221&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-33</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9225&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">readblocks</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">blocksize</span><span class="o">=</span><span class="mi">2</span><span class="o">**</span><span class="mi">17</span><span class="p">):</span>
+    <span class="n">lb</span> <span class="o">=</span> <span class="n">blocksize</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c"># 尽可能地读取更多数据，直到出现不完整读操作（partial read）为止。</span>
+    <span class="k">while</span> <span class="n">lb</span> <span class="o">==</span> <span class="n">blocksize</span><span class="p">:</span>                                 
+        <span class="c"># 获取数据块。</span>
+        <span class="n">block</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">substr</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">blocksize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> 
+        <span class="c"># 准备进行下一次遍历。</span>
+        <span class="k">yield</span> <span class="n">block</span>                                        
+        <span class="n">lb</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>                                    
+        <span class="n">pos</span> <span class="o">+=</span> <span class="n">lb</span>                                          
+    <span class="k">yield</span> <span class="s">&#39;&#39;</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9225&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 6-34</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9229&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">readblocks_gz</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+    <span class="n">inp</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+    <span class="n">decoder</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="c"># 从Redis里面读入原始数据。</span>
+    <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">readblocks</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="mi">2</span><span class="o">**</span><span class="mi">17</span><span class="p">):</span>                 
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">decoder</span><span class="p">:</span>
+            <span class="n">inp</span> <span class="o">+=</span> <span class="n">block</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c"># 分析头信息以便取得被压缩数据。</span>
+                <span class="k">if</span> <span class="n">inp</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span> <span class="o">!=</span> <span class="s">&quot;</span><span class="se">\x1f\x8b\x08</span><span class="s">&quot;</span><span class="p">:</span>                
+                    <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s">&quot;invalid gzip data&quot;</span><span class="p">)</span>         
+                <span class="n">i</span> <span class="o">=</span> <span class="mi">10</span>                                          
+                <span class="n">flag</span> <span class="o">=</span> <span class="nb">ord</span><span class="p">(</span><span class="n">inp</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>                              
+                <span class="k">if</span> <span class="n">flag</span> <span class="o">&amp;</span> <span class="mi">4</span><span class="p">:</span>                                    
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">2</span> <span class="o">+</span> <span class="nb">ord</span><span class="p">(</span><span class="n">inp</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="o">+</span> <span class="mi">256</span><span class="o">*</span><span class="nb">ord</span><span class="p">(</span><span class="n">inp</span><span class="p">[</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">])</span>    
+                <span class="k">if</span> <span class="n">flag</span> <span class="o">&amp;</span> <span class="mi">8</span><span class="p">:</span>                                    
+                    <span class="n">i</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\0</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>                  
+                <span class="k">if</span> <span class="n">flag</span> <span class="o">&amp;</span> <span class="mi">16</span><span class="p">:</span>                                   
+                    <span class="n">i</span> <span class="o">=</span> <span class="n">inp</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\0</span><span class="s">&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>                  
+                <span class="k">if</span> <span class="n">flag</span> <span class="o">&amp;</span> <span class="mi">2</span><span class="p">:</span>                                   
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">2</span>                                     
+
+                <span class="c"># 程序读取的头信息并不完整。</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">inp</span><span class="p">):</span>                               
+                    <span class="k">raise</span> <span class="ne">IndexError</span><span class="p">(</span><span class="s">&quot;not enough data&quot;</span><span class="p">)</span>         
+            <span class="k">except</span> <span class="p">(</span><span class="ne">IndexError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>                    
+                <span class="k">continue</span>                                       
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c"># 已经找到头信息，准备好相应的解压程序。</span>
+                <span class="n">block</span> <span class="o">=</span> <span class="n">inp</span><span class="p">[</span><span class="n">i</span><span class="p">:]</span>                                 
+                <span class="n">inp</span> <span class="o">=</span> <span class="bp">None</span>                                      
+                <span class="n">decoder</span> <span class="o">=</span> <span class="n">zlib</span><span class="o">.</span><span class="n">decompressobj</span><span class="p">(</span><span class="o">-</span><span class="n">zlib</span><span class="o">.</span><span class="n">MAX_WBITS</span><span class="p">)</span>   
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">block</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+        <span class="c"># 所有数据已经处理完毕，向调用者返回最后剩下的数据块。</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">block</span><span class="p">:</span>                                           
+            <span class="k">yield</span> <span class="n">decoder</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>                               
+            <span class="k">break</span>
+
+        <span class="c"># 向调用者返回解压后的数据块。</span>
+        <span class="k">yield</span> <span class="n">decoder</span><span class="o">.</span><span class="n">decompress</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>                         
+<span class="c"># &lt;end id=&quot;_1314_14473_9229&quot;/&gt;</span>
+
+<span class="k">class</span> <span class="nc">TestCh06</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">redis</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">tearDown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+        <span class="k">print</span>
+        <span class="k">print</span>
+
+    <span class="k">def</span> <span class="nf">test_add_update_contact</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pprint</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;recent:user&#39;</span><span class="p">)</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s add a few contacts...&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+            <span class="n">add_update_contact</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;user&#39;</span><span class="p">,</span> <span class="s">&#39;contact-</span><span class="si">%i</span><span class="s">-</span><span class="si">%i</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">i</span><span class="o">//</span><span class="mi">3</span><span class="p">,</span> <span class="n">i</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;Current recently contacted contacts&quot;</span>
+        <span class="n">contacts</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">lrange</span><span class="p">(</span><span class="s">&#39;recent:user&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">contacts</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">contacts</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s pull one of the older ones up to the front&quot;</span>
+        <span class="n">add_update_contact</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;user&#39;</span><span class="p">,</span> <span class="s">&#39;contact-1-4&#39;</span><span class="p">)</span>
+        <span class="n">contacts</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">lrange</span><span class="p">(</span><span class="s">&#39;recent:user&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;New top-3 contacts:&quot;</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">contacts</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">contacts</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s">&#39;contact-1-4&#39;</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s remove a contact...&quot;</span>
+        <span class="k">print</span> <span class="n">remove_contact</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;user&#39;</span><span class="p">,</span> <span class="s">&#39;contact-2-6&#39;</span><span class="p">)</span>
+        <span class="n">contacts</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">lrange</span><span class="p">(</span><span class="s">&#39;recent:user&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;New contacts:&quot;</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">contacts</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">contacts</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">9</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="k">print</span> <span class="s">&quot;And let&#39;s finally autocomplete on &quot;</span>
+        <span class="nb">all</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">lrange</span><span class="p">(</span><span class="s">&#39;recent:user&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">contacts</span> <span class="o">=</span> <span class="n">fetch_autocomplete_list</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;user&#39;</span><span class="p">,</span> <span class="s">&#39;c&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">all</span> <span class="o">==</span> <span class="n">contacts</span><span class="p">)</span>
+        <span class="n">equiv</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">all</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;contact-2-&#39;</span><span class="p">)]</span>
+        <span class="n">contacts</span> <span class="o">=</span> <span class="n">fetch_autocomplete_list</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;user&#39;</span><span class="p">,</span> <span class="s">&#39;contact-2-&#39;</span><span class="p">)</span>
+        <span class="n">equiv</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+        <span class="n">contacts</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">equiv</span><span class="p">,</span> <span class="n">contacts</span><span class="p">)</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;recent:user&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_address_book_autocomplete</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;members:test&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;the start/end range of &#39;abc&#39; is:&quot;</span><span class="p">,</span> <span class="n">find_prefix_range</span><span class="p">(</span><span class="s">&#39;abc&#39;</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s add a few people to the guild&quot;</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;jeff&#39;</span><span class="p">,</span> <span class="s">&#39;jenny&#39;</span><span class="p">,</span> <span class="s">&#39;jack&#39;</span><span class="p">,</span> <span class="s">&#39;jennifer&#39;</span><span class="p">]:</span>
+            <span class="n">join_guild</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">print</span>
+        <span class="k">print</span> <span class="s">&quot;now let&#39;s try to find users with names starting with &#39;je&#39;:&quot;</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">autocomplete_on_prefix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;je&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="n">r</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;jeff just left to join a different guild...&quot;</span>
+        <span class="n">leave_guild</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;jeff&#39;</span><span class="p">)</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">autocomplete_on_prefix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;je&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="n">r</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;members:test&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_distributed_locking</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;lock:testlock&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Getting an initial lock...&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">acquire_lock_with_timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testlock&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;Got it!&quot;</span>
+        <span class="k">print</span> <span class="s">&quot;Trying to get it again without releasing the first one...&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">acquire_lock_with_timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testlock&#39;</span><span class="p">,</span> <span class="o">.</span><span class="mo">01</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;Failed to get it!&quot;</span>
+        <span class="k">print</span>
+        <span class="k">print</span> <span class="s">&quot;Waiting for the lock to timeout...&quot;</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Getting the lock again...&quot;</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">acquire_lock_with_timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testlock&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Got it!&quot;</span>
+        <span class="k">print</span> <span class="s">&quot;Releasing the lock...&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">release_lock</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testlock&#39;</span><span class="p">,</span> <span class="n">r</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;Released it...&quot;</span>
+        <span class="k">print</span>
+        <span class="k">print</span> <span class="s">&quot;Acquiring it again...&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">acquire_lock_with_timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testlock&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;Got it!&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;lock:testlock&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_counting_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;testsem&#39;</span><span class="p">,</span> <span class="s">&#39;testsem:owner&#39;</span><span class="p">,</span> <span class="s">&#39;testsem:counter&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Getting 3 initial semaphores with a limit of 3...&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">acquire_fair_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testsem&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;Done!&quot;</span>
+        <span class="k">print</span> <span class="s">&quot;Getting one more that should fail...&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">acquire_fair_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testsem&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;Couldn&#39;t get it!&quot;</span>
+        <span class="k">print</span>
+        <span class="k">print</span> <span class="s">&quot;Lets&#39;s wait for some of them to time out&quot;</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Can we get one?&quot;</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">acquire_fair_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testsem&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Got one!&quot;</span>
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s release it...&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">release_fair_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testsem&#39;</span><span class="p">,</span> <span class="n">r</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;Released!&quot;</span>
+        <span class="k">print</span>
+        <span class="k">print</span> <span class="s">&quot;And let&#39;s make sure we can get 3 more!&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">acquire_fair_semaphore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testsem&#39;</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;We got them!&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;testsem&#39;</span><span class="p">,</span> <span class="s">&#39;testsem:owner&#39;</span><span class="p">,</span> <span class="s">&#39;testsem:counter&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_delayed_tasks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">threading</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;queue:tqueue&#39;</span><span class="p">,</span> <span class="s">&#39;delayed:&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s start some regular and delayed tasks...&quot;</span>
+        <span class="k">for</span> <span class="n">delay</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">.</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">execute_later</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;tqueue&#39;</span><span class="p">,</span> <span class="s">&#39;testfn&#39;</span><span class="p">,</span> <span class="p">[],</span> <span class="n">delay</span><span class="p">))</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">llen</span><span class="p">(</span><span class="s">&#39;queue:tqueue&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;How many non-delayed tasks are there (should be 2)?&quot;</span><span class="p">,</span> <span class="n">r</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">print</span>
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s start up a thread to bring those delayed tasks back...&quot;</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">poll_queue</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,))</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">setDaemon</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="k">print</span> <span class="s">&quot;Started.&quot;</span>
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s wait for those tasks to be prepared...&quot;</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">global</span> <span class="n">QUIT</span>
+        <span class="n">QUIT</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">llen</span><span class="p">(</span><span class="s">&#39;queue:tqueue&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Waiting is over, how many tasks do we have (should be 4)?&quot;</span><span class="p">,</span> <span class="n">r</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;queue:tqueue&#39;</span><span class="p">,</span> <span class="s">&#39;delayed:&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_multi_recipient_messaging</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;ids:chat:&#39;</span><span class="p">,</span> <span class="s">&#39;msgs:1&#39;</span><span class="p">,</span> <span class="s">&#39;ids:1&#39;</span><span class="p">,</span> <span class="s">&#39;seen:joe&#39;</span><span class="p">,</span> <span class="s">&#39;seen:jeff&#39;</span><span class="p">,</span> <span class="s">&#39;seen:jenny&#39;</span><span class="p">)</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s create a new chat session with some recipients...&quot;</span>
+        <span class="n">chat_id</span> <span class="o">=</span> <span class="n">create_chat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;joe&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;jeff&#39;</span><span class="p">,</span> <span class="s">&#39;jenny&#39;</span><span class="p">],</span> <span class="s">&#39;message 1&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Now let&#39;s send a few messages...&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">):</span>
+            <span class="n">send_message</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">chat_id</span><span class="p">,</span> <span class="s">&#39;joe&#39;</span><span class="p">,</span> <span class="s">&#39;message </span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">i</span><span class="p">)</span>
+        <span class="k">print</span>
+        <span class="k">print</span> <span class="s">&quot;And let&#39;s get the messages that are waiting for jeff and jenny...&quot;</span>
+        <span class="n">r1</span> <span class="o">=</span> <span class="n">fetch_pending_messages</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;jeff&#39;</span><span class="p">)</span>
+        <span class="n">r2</span> <span class="o">=</span> <span class="n">fetch_pending_messages</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;jenny&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;They are the same?&quot;</span><span class="p">,</span> <span class="n">r1</span><span class="o">==</span><span class="n">r2</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">r1</span><span class="p">,</span> <span class="n">r2</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Those messages are:&quot;</span>
+        <span class="kn">import</span> <span class="nn">pprint</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">r1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;ids:chat:&#39;</span><span class="p">,</span> <span class="s">&#39;msgs:1&#39;</span><span class="p">,</span> <span class="s">&#39;ids:1&#39;</span><span class="p">,</span> <span class="s">&#39;seen:joe&#39;</span><span class="p">,</span> <span class="s">&#39;seen:jeff&#39;</span><span class="p">,</span> <span class="s">&#39;seen:jenny&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_file_distribution</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">gzip</span><span class="o">,</span> <span class="nn">shutil</span><span class="o">,</span> <span class="nn">tempfile</span><span class="o">,</span> <span class="nn">threading</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;test:temp-1.txt&#39;</span><span class="p">,</span> <span class="s">&#39;test:temp-2.txt&#39;</span><span class="p">,</span> <span class="s">&#39;test:temp-3.txt&#39;</span><span class="p">,</span> <span class="s">&#39;msgs:test:&#39;</span><span class="p">,</span> <span class="s">&#39;seen:0&#39;</span><span class="p">,</span> <span class="s">&#39;seen:source&#39;</span><span class="p">,</span> <span class="s">&#39;ids:test:&#39;</span><span class="p">,</span> <span class="s">&#39;chat:test:&#39;</span><span class="p">)</span>
+
+        <span class="n">dire</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s">&quot;Creating some temporary &#39;log&#39; files...&quot;</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">dire</span> <span class="o">+</span> <span class="s">&#39;/temp-1.txt&#39;</span><span class="p">,</span> <span class="s">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&#39;one line</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">dire</span> <span class="o">+</span> <span class="s">&#39;/temp-2.txt&#39;</span><span class="p">,</span> <span class="s">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="mi">10000</span> <span class="o">*</span> <span class="s">&#39;many lines</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">)</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">gzip</span><span class="o">.</span><span class="n">GzipFile</span><span class="p">(</span><span class="n">dire</span> <span class="o">+</span> <span class="s">&#39;/temp-3.txt.gz&#39;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s">&#39;wb&#39;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">100000</span><span class="p">):</span>
+                <span class="n">out</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&#39;random line </span><span class="si">%s</span><span class="se">\n</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">urandom</span><span class="p">(</span><span class="mi">16</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;hex&#39;</span><span class="p">),))</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">stat</span><span class="p">(</span><span class="n">dire</span> <span class="o">+</span> <span class="s">&#39;/temp-3.txt.gz&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">st_size</span>
+            <span class="k">print</span> <span class="s">&quot;Done.&quot;</span>
+            <span class="k">print</span>
+            <span class="k">print</span> <span class="s">&quot;Starting up a thread to copy logs to redis...&quot;</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">copy_logs_to_redis</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">dire</span><span class="p">,</span> <span class="s">&#39;test:&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="p">))</span>
+            <span class="n">t</span><span class="o">.</span><span class="n">setDaemon</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+            <span class="k">print</span> <span class="s">&quot;Let&#39;s pause to let some logs get copied to Redis...&quot;</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mi">25</span><span class="p">)</span>
+            <span class="k">print</span>
+            <span class="k">print</span> <span class="s">&quot;Okay, the logs should be ready. Let&#39;s process them!&quot;</span>
+
+            <span class="n">index</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="k">def</span> <span class="nf">callback</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">line</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">line</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="k">print</span> <span class="s">&quot;Finished with a file </span><span class="si">%s</span><span class="s">, linecount: </span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="p">(</span><span class="n">index</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">counts</span><span class="p">[</span><span class="n">index</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
+                    <span class="n">index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">elif</span> <span class="n">line</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span><span class="p">):</span>
+                    <span class="n">counts</span><span class="p">[</span><span class="n">index</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+            <span class="k">print</span> <span class="s">&quot;Files should have 1, 10000, and 100000 lines&quot;</span>
+            <span class="n">process_logs_from_redis</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;0&#39;</span><span class="p">,</span> <span class="n">callback</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">10000</span><span class="p">,</span> <span class="mi">100000</span><span class="p">])</span>
+
+            <span class="k">print</span>
+            <span class="k">print</span> <span class="s">&quot;Let&#39;s wait for the copy thread to finish cleaning up...&quot;</span>
+            <span class="n">t</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+            <span class="k">print</span> <span class="s">&quot;Done cleaning out Redis!&quot;</span>
+
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s">&quot;Time to clean up files...&quot;</span>
+            <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">dire</span><span class="p">)</span>
+            <span class="k">print</span> <span class="s">&quot;Cleaned out files!&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;test:temp-1.txt&#39;</span><span class="p">,</span> <span class="s">&#39;test:temp-2.txt&#39;</span><span class="p">,</span> <span class="s">&#39;test:temp-3.txt&#39;</span><span class="p">,</span> <span class="s">&#39;msgs:test:&#39;</span><span class="p">,</span> <span class="s">&#39;seen:0&#39;</span><span class="p">,</span> <span class="s">&#39;seen:source&#39;</span><span class="p">,</span> <span class="s">&#39;ids:test:&#39;</span><span class="p">,</span> <span class="s">&#39;chat:test:&#39;</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="chapter7.html" title="第 7 章相关源代码"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="chapter5.html" title="第 5 章相关源代码"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

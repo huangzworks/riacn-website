@@ -1,0 +1,830 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 5 章相关源代码 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="../index.html" />
+    <link rel="next" title="第 6 章相关源代码" href="chapter6.html" />
+    <link rel="prev" title="第 4 章相关源代码" href="chapter4.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chapter6.html" title="第 6 章相关源代码"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chapter4.html" title="第 4 章相关源代码"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 5 章相关源代码<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="kn">import</span> <span class="nn">bisect</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">csv</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">threading</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">unittest</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="kn">import</span> <span class="nn">redis</span>
+
+<span class="n">QUIT</span> <span class="o">=</span> <span class="bp">False</span>
+<span class="n">SAMPLE_COUNT</span> <span class="o">=</span> <span class="mi">100</span>
+
+<span class="n">config_connection</span> <span class="o">=</span> <span class="bp">None</span>
+
+
+<span class="c"># 代码清单 5-1</span>
+<span class="c"># &lt;start id=&quot;recent_log&quot;/&gt;</span>
+<span class="c"># 设置一个字典，它可以帮助我们将大部分日志的安全级别转换成某种一致的东西。</span>
+<span class="n">SEVERITY</span> <span class="o">=</span> <span class="p">{</span>                                                   
+    <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">:</span> <span class="s">&#39;debug&#39;</span><span class="p">,</span>                                    
+    <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">:</span> <span class="s">&#39;info&#39;</span><span class="p">,</span>                                      
+    <span class="n">logging</span><span class="o">.</span><span class="n">WARNING</span><span class="p">:</span> <span class="s">&#39;warning&#39;</span><span class="p">,</span>                                
+    <span class="n">logging</span><span class="o">.</span><span class="n">ERROR</span><span class="p">:</span> <span class="s">&#39;error&#39;</span><span class="p">,</span>                                    
+    <span class="n">logging</span><span class="o">.</span><span class="n">CRITICAL</span><span class="p">:</span> <span class="s">&#39;critical&#39;</span><span class="p">,</span>                              
+<span class="p">}</span>                                                              
+<span class="n">SEVERITY</span><span class="o">.</span><span class="n">update</span><span class="p">((</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">SEVERITY</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>    
+
+<span class="k">def</span> <span class="nf">log_recent</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">severity</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="n">pipe</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="c"># 尝试将日志的级别转换成简单的字符串。</span>
+    <span class="n">severity</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">SEVERITY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">severity</span><span class="p">,</span> <span class="n">severity</span><span class="p">))</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>   
+    <span class="c"># 创建负责存储消息的键。</span>
+    <span class="n">destination</span> <span class="o">=</span> <span class="s">&#39;recent:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">severity</span><span class="p">)</span>              
+    <span class="c"># 将当前时间添加到消息里面，用于记录消息的发送时间。</span>
+    <span class="n">message</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">asctime</span><span class="p">()</span> <span class="o">+</span> <span class="s">&#39; &#39;</span> <span class="o">+</span> <span class="n">message</span>                   
+    <span class="c"># 使用流水线来将通信往返次数降低为一次。</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">pipe</span> <span class="ow">or</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">()</span>                             
+    <span class="c"># 将消息添加到日志列表的最前面。</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">lpush</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>                           
+    <span class="c"># 对日志列表进行修剪，让它只包含最新的100条消息。</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">ltrim</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">99</span><span class="p">)</span>                             
+    <span class="c"># 执行两个命令。</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                                           
+<span class="c"># &lt;end id=&quot;recent_log&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-2</span>
+<span class="c"># &lt;start id=&quot;common_log&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">log_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">severity</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+    <span class="c"># 设置日志的级别。</span>
+    <span class="n">severity</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">SEVERITY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">severity</span><span class="p">,</span> <span class="n">severity</span><span class="p">))</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> 
+    <span class="c"># 负责存储最新日志的键。</span>
+    <span class="n">destination</span> <span class="o">=</span> <span class="s">&#39;common:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">severity</span><span class="p">)</span>
+    <span class="c"># 因为程序每小时需要轮换一次日志，所以它使用一个键来记录当前所处的小时数。</span>
+    <span class="n">start_key</span> <span class="o">=</span> <span class="n">destination</span> <span class="o">+</span> <span class="s">&#39;:start&#39;</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">()</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">timeout</span>
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c"># 对记录当前小时数的键进行监视，确保轮换操作可以正确地执行。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">start_key</span><span class="p">)</span>
+            <span class="c"># 取得当前时间。</span>
+            <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span><span class="o">.</span><span class="n">timetuple</span><span class="p">()</span>
+            <span class="c"># 取得当前所处的小时数。</span>
+            <span class="n">hour_start</span> <span class="o">=</span> <span class="n">datetime</span><span class="p">(</span><span class="o">*</span><span class="n">now</span><span class="p">[:</span><span class="mi">4</span><span class="p">])</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span> 
+
+            <span class="n">existing</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">start_key</span><span class="p">)</span>
+            <span class="c"># 创建一个事务。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>
+            <span class="c"># 如果目前的常见日志列表是上一个小时的……</span>
+            <span class="k">if</span> <span class="n">existing</span> <span class="ow">and</span> <span class="n">existing</span> <span class="o">&lt;</span> <span class="n">hour_start</span><span class="p">:</span> 
+                <span class="c"># ……那么将旧的常见日志信息进行归档。</span>
+                <span class="n">pipe</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">destination</span> <span class="o">+</span> <span class="s">&#39;:last&#39;</span><span class="p">)</span>
+                <span class="n">pipe</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">start_key</span><span class="p">,</span> <span class="n">destination</span> <span class="o">+</span> <span class="s">&#39;:pstart&#39;</span><span class="p">)</span> 
+                <span class="c"># 更新当前所处的小时数。</span>
+                <span class="n">pipe</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">start_key</span><span class="p">,</span> <span class="n">hour_start</span><span class="p">)</span>
+
+            <span class="c"># 对记录日志出现次数的计数器执行自增操作。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span> 
+            <span class="c"># log_recent()函数负责记录日志并调用execute()函数。</span>
+            <span class="n">log_recent</span><span class="p">(</span><span class="n">pipe</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">severity</span><span class="p">,</span> <span class="n">pipe</span><span class="p">)</span> 
+            <span class="k">return</span>
+        <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span>
+            <span class="c"># 如果程序因为其他客户端在执行归档操作而出现监视错误，那么重试。</span>
+            <span class="k">continue</span>
+<span class="c"># &lt;end id=&quot;common_log&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-3</span>
+<span class="c"># &lt;start id=&quot;update_counter&quot;/&gt;</span>
+<span class="c"># 以秒为单位的计数器精度，分别为1秒钟、5秒钟、1分钟、5分钟、1小时、5小时、1天——用户可以按需调整这些精度。</span>
+<span class="n">PRECISION</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">300</span><span class="p">,</span> <span class="mi">3600</span><span class="p">,</span> <span class="mi">18000</span><span class="p">,</span> <span class="mi">86400</span><span class="p">]</span>         <span class="c">#A</span>
+
+<span class="k">def</span> <span class="nf">update_counter</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">now</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="c"># 通过取得当前时间来判断应该对哪个时间片执行自增操作。</span>
+    <span class="n">now</span> <span class="o">=</span> <span class="n">now</span> <span class="ow">or</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> 
+    <span class="c"># 为了保证之后的清理工作可以正确地执行，这里需要创建一个事务型流水线。</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">()</span> 
+    <span class="c"># 为我们记录的每种精度都创建一个计数器。</span>
+    <span class="k">for</span> <span class="n">prec</span> <span class="ow">in</span> <span class="n">PRECISION</span><span class="p">:</span>
+        <span class="c"># 取得当前时间片的开始时间。</span>
+        <span class="n">pnow</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">now</span> <span class="o">/</span> <span class="n">prec</span><span class="p">)</span> <span class="o">*</span> <span class="n">prec</span>
+        <span class="c"># 创建负责存储计数信息的散列。</span>
+        <span class="nb">hash</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">prec</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="c"># 将计数器的引用信息添加到有序集合里面，</span>
+        <span class="c"># 并将其分值设置为0，以便在之后执行清理操作。</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;known:&#39;</span><span class="p">,</span> <span class="nb">hash</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="c"># 对给定名字和精度的计数器进行更新。</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="s">&#39;count:&#39;</span> <span class="o">+</span> <span class="nb">hash</span><span class="p">,</span> <span class="n">pnow</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span> 
+    <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+<span class="c"># &lt;end id=&quot;update_counter&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-4</span>
+<span class="c"># &lt;start id=&quot;get_counter&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">get_counter</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">precision</span><span class="p">):</span>
+    <span class="c"># 取得存储着计数器数据的键的名字。</span>
+    <span class="nb">hash</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">precision</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="c"># 从Redis里面取出计数器数据。</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="s">&#39;count:&#39;</span> <span class="o">+</span> <span class="nb">hash</span><span class="p">)</span> 
+    <span class="c"># 将计数器数据转换成指定的格式。</span>
+    <span class="n">to_return</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">to_return</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="nb">int</span><span class="p">(</span><span class="n">key</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)))</span> 
+    <span class="c"># 对数据进行排序，把旧的数据样本排在前面。</span>
+    <span class="n">to_return</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span> 
+    <span class="k">return</span> <span class="n">to_return</span>
+<span class="c"># &lt;end id=&quot;get_counter&quot;/&gt;</span>
+
+<span class="c"># &lt;start id=&quot;clean_counters&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">clean_counters</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 为了平等地处理更新频率各不相同的多个计数器，程序需要记录清理操作执行的次数。</span>
+    <span class="n">passes</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c"># 持续地对计数器进行清理，直到退出为止。</span>
+    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
+        <span class="c"># 记录清理操作开始执行的时间，用于计算清理操作执行的时长。</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="c"># 渐进地遍历所有已知的计数器。</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">conn</span><span class="o">.</span><span class="n">zcard</span><span class="p">(</span><span class="s">&#39;known:&#39;</span><span class="p">):</span>
+            <span class="c"># 取得被检查计数器的数据。</span>
+            <span class="nb">hash</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;known:&#39;</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+            <span class="n">index</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hash</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="nb">hash</span> <span class="o">=</span> <span class="nb">hash</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="c"># 取得计数器的精度。</span>
+            <span class="n">prec</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">hash</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="c"># 因为清理程序每60秒钟就会循环一次，</span>
+            <span class="c"># 所以这里需要根据计数器的更新频率来判断是否真的有必要对计数器进行清理。</span>
+            <span class="n">bprec</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">prec</span> <span class="o">//</span> <span class="mi">60</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">1</span>
+            <span class="c"># 如果这个计数器在这次循环里不需要进行清理，</span>
+            <span class="c"># 那么检查下一个计数器。</span>
+            <span class="c"># （举个例子，如果清理程序只循环了三次，而计数器的更新频率为每5分钟一次，</span>
+            <span class="c"># 那么程序暂时还不需要对这个计数器进行清理。）</span>
+            <span class="k">if</span> <span class="n">passes</span> <span class="o">%</span> <span class="n">bprec</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">hkey</span> <span class="o">=</span> <span class="s">&#39;count:&#39;</span> <span class="o">+</span> <span class="nb">hash</span>
+            <span class="c"># 根据给定的精度以及需要保留的样本数量，</span>
+            <span class="c"># 计算出我们需要保留什么时间之前的样本。</span>
+            <span class="n">cutoff</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">SAMPLE_COUNT</span> <span class="o">*</span> <span class="n">prec</span> 
+            <span class="c"># 获取样本的开始时间，并将其从字符串转换为整数。</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">conn</span><span class="o">.</span><span class="n">hkeys</span><span class="p">(</span><span class="n">hkey</span><span class="p">))</span>
+            <span class="c"># 计算出需要移除的样本数量。</span>
+            <span class="n">samples</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+            <span class="n">remove</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_right</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span> 
+
+            <span class="c"># 按需移除计数样本。</span>
+            <span class="k">if</span> <span class="n">remove</span><span class="p">:</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">hdel</span><span class="p">(</span><span class="n">hkey</span><span class="p">,</span> <span class="o">*</span><span class="n">samples</span><span class="p">[:</span><span class="n">remove</span><span class="p">])</span> 
+                <span class="c"># 这个散列可能已经被清空。</span>
+                <span class="k">if</span> <span class="n">remove</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">samples</span><span class="p">):</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="c"># 在尝试修改计数器散列之前，对其进行监视。</span>
+                        <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">hkey</span><span class="p">)</span>
+                        <span class="c"># 验证计数器散列是否为空，如果是的话，</span>
+                        <span class="c"># 那么从记录已知计数器的有序集合里面移除它。</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">pipe</span><span class="o">.</span><span class="n">hlen</span><span class="p">(</span><span class="n">hkey</span><span class="p">):</span>
+                            <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>
+                            <span class="n">pipe</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;known:&#39;</span><span class="p">,</span> <span class="nb">hash</span><span class="p">)</span>  
+                            <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+                            <span class="c"># 在删除了一个计数器的情况下，</span>
+                            <span class="c"># 下次循环可以使用与本次循环相同的索引。</span>
+                            <span class="n">index</span> <span class="o">-=</span> <span class="mi">1</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="c"># 计数器散列并不为空，</span>
+                            <span class="c"># 继续让它留在记录已有计数器的有序集合里面。</span>
+                            <span class="n">pipe</span><span class="o">.</span><span class="n">unwatch</span><span class="p">()</span>
+                    <span class="c"># 有其他程序向这个计算器散列添加了新的数据，</span>
+                    <span class="c"># 它已经不再是空的了，继续让它留在记录已知计数器的有序集合里面。</span>
+                    <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span>
+                        <span class="k">pass</span>
+
+        <span class="c"># 为了让清理操作的执行频率与计数器更新的频率保持一致，</span>
+        <span class="c"># 对记录循环次数的变量以及记录执行时长的变量进行更新。</span>
+        <span class="n">passes</span> <span class="o">+=</span> <span class="mi">1</span> 
+        <span class="n">duration</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span>  
+        <span class="c"># 如果这次循环未耗尽60秒钟，那么在余下的时间内进行休眠；</span>
+        <span class="c"># 如果60秒钟已经耗尽，那么休眠一秒钟以便稍作休息。</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">60</span> <span class="o">-</span> <span class="n">duration</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>   
+<span class="c"># &lt;end id=&quot;clean_counters&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-6</span>
+<span class="c"># &lt;start id=&quot;update_stats&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">update_stats</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="nb">type</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+    <span class="c"># 设置用于存储统计数据的键。</span>
+    <span class="n">destination</span> <span class="o">=</span> <span class="s">&#39;stats:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> 
+    <span class="c"># 像common_log()函数一样，</span>
+    <span class="c"># 处理当前这一个小时的数据和上一个小时的数据。</span>
+    <span class="n">start_key</span> <span class="o">=</span> <span class="n">destination</span> <span class="o">+</span> <span class="s">&#39;:start&#39;</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="n">timeout</span>
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">start_key</span><span class="p">)</span> 
+            <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span><span class="o">.</span><span class="n">timetuple</span><span class="p">()</span> 
+            <span class="n">hour_start</span> <span class="o">=</span> <span class="n">datetime</span><span class="p">(</span><span class="o">*</span><span class="n">now</span><span class="p">[:</span><span class="mi">4</span><span class="p">])</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span> 
+
+            <span class="n">existing</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">start_key</span><span class="p">)</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">existing</span> <span class="ow">and</span> <span class="n">existing</span> <span class="o">&lt;</span> <span class="n">hour_start</span><span class="p">:</span>
+                <span class="n">pipe</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="n">destination</span> <span class="o">+</span> <span class="s">&#39;:last&#39;</span><span class="p">)</span> 
+                <span class="n">pipe</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">start_key</span><span class="p">,</span> <span class="n">destination</span> <span class="o">+</span> <span class="s">&#39;:pstart&#39;</span><span class="p">)</span> 
+                <span class="n">pipe</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">start_key</span><span class="p">,</span> <span class="n">hour_start</span><span class="p">)</span>
+
+            <span class="n">tkey1</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+            <span class="n">tkey2</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+            <span class="c"># 将值添加到临时键里面。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">tkey1</span><span class="p">,</span> <span class="s">&#39;min&#39;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">tkey2</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>                     
+            <span class="c"># 使用合适聚合函数MIN和MAX，</span>
+            <span class="c"># 对存储统计数据的键和两个临时键进行并集计算。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zunionstore</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span>                     
+                <span class="p">[</span><span class="n">destination</span><span class="p">,</span> <span class="n">tkey1</span><span class="p">],</span> <span class="n">aggregate</span><span class="o">=</span><span class="s">&#39;min&#39;</span><span class="p">)</span>          
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zunionstore</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span>                      
+                <span class="p">[</span><span class="n">destination</span><span class="p">,</span> <span class="n">tkey2</span><span class="p">],</span> <span class="n">aggregate</span><span class="o">=</span><span class="s">&#39;max&#39;</span><span class="p">)</span>        
+
+            <span class="c"># 删除临时键。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">tkey1</span><span class="p">,</span> <span class="n">tkey2</span><span class="p">)</span>                           
+            <span class="c"># 对有序集合中的样本数量、值的和、值的平方之和三个成员进行更新。</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="s">&#39;count&#39;</span><span class="p">)</span>                  
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="s">&#39;sum&#39;</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>            
+            <span class="n">pipe</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="n">destination</span><span class="p">,</span> <span class="s">&#39;sumsq&#39;</span><span class="p">,</span> <span class="n">value</span><span class="o">*</span><span class="n">value</span><span class="p">)</span>    
+
+            <span class="c"># 返回基本的计数信息，以便函数调用者在有需要时做进一步的处理。</span>
+            <span class="k">return</span> <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span>                        
+        <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span>
+            <span class="c"># 如果新的一个小时已经开始，并且旧的数据已经被归档，那么进行重试。</span>
+            <span class="k">continue</span>                                           
+<span class="c"># &lt;end id=&quot;update_stats&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-7</span>
+<span class="c"># &lt;start id=&quot;get_stats&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">get_stats</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+    <span class="c"># 程序将从这个键里面取出统计数据。</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="s">&#39;stats:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span>                            
+    <span class="c"># 获取基本的统计数据，并将它们都放到一个字典里面。</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">))</span>            
+    <span class="c"># 计算平均值。</span>
+    <span class="n">data</span><span class="p">[</span><span class="s">&#39;average&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;sum&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;count&#39;</span><span class="p">]</span>                     
+    <span class="c"># 计算标准差的第一个步骤。</span>
+    <span class="n">numerator</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;sumsq&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;sum&#39;</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">/</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;count&#39;</span><span class="p">]</span>       
+    <span class="c"># 完成标准差的计算工作。</span>
+    <span class="n">data</span><span class="p">[</span><span class="s">&#39;stddev&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">numerator</span> <span class="o">/</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s">&#39;count&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">))</span> <span class="o">**</span> <span class="o">.</span><span class="mi">5</span>      
+    <span class="k">return</span> <span class="n">data</span>
+<span class="c"># &lt;end id=&quot;get_stats&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-8</span>
+<span class="c"># &lt;start id=&quot;access_time_context_manager&quot;/&gt;</span>
+<span class="c"># 将这个Python生成器用作上下文管理器。</span>
+<span class="nd">@contextlib.contextmanager</span>                                            
+<span class="k">def</span> <span class="nf">access_time</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+    <span class="c"># 记录代码块执行前的时间。</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>                                               
+    <span class="c"># 运行被包裹的代码块。</span>
+    <span class="k">yield</span>                                                              
+
+    <span class="c"># 计算代码块的执行时长。</span>
+    <span class="n">delta</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>                                        
+    <span class="c"># 更新这一上下文的统计数据。</span>
+    <span class="n">stats</span> <span class="o">=</span> <span class="n">update_stats</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="s">&#39;AccessTime&#39;</span><span class="p">,</span> <span class="n">delta</span><span class="p">)</span>           
+    <span class="c"># 计算页面的平均访问时长。</span>
+    <span class="n">average</span> <span class="o">=</span> <span class="n">stats</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="n">stats</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>                                      
+
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+    <span class="c"># 将页面的平均访问时长添加到记录最慢访问时间的有序集合里面。</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;slowest:AccessTime&#39;</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">average</span><span class="p">)</span>                 
+    <span class="c"># AccessTime有序集合只会保留最慢的100条记录。</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">zremrangebyrank</span><span class="p">(</span><span class="s">&#39;slowest:AccessTime&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">101</span><span class="p">)</span>                
+    <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+<span class="c"># &lt;end id=&quot;access_time_context_manager&quot;/&gt;</span>
+
+
+<span class="c"># &lt;start id=&quot;access_time_use&quot;/&gt;</span>
+<span class="c"># 这个视图（view）接受一个Redis连接以及一个生成内容的回调函数为参数。</span>
+<span class="k">def</span> <span class="nf">process_view</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">callback</span><span class="p">):</span>             
+    <span class="c"># 计算并记录访问时长的上下文管理器就是这样包围代码块的。</span>
+    <span class="k">with</span> <span class="n">access_time</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">path</span><span class="p">):</span>     
+        <span class="c"># 当上下文管理器中的yield语句被执行时，这个语句就会被执行。</span>
+        <span class="k">return</span> <span class="n">callback</span><span class="p">()</span>                      
+<span class="c"># &lt;end id=&quot;access_time_use&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-9</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9188&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">ip_to_score</span><span class="p">(</span><span class="n">ip_address</span><span class="p">):</span>
+    <span class="n">score</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ip_address</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;.&#39;</span><span class="p">):</span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">score</span> <span class="o">*</span> <span class="mi">256</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">score</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9188&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-10</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9191&quot;/&gt;</span>
+<span class="c"># 这个函数在执行时需要给定GeoLiteCity-Blocks.csv文件所在的位置。</span>
+<span class="k">def</span> <span class="nf">import_ips_to_redis</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">filename</span><span class="p">):</span>             
+    <span class="n">csv_file</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">count</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">csv_file</span><span class="p">):</span>
+        <span class="c"># 按需将IP地址转换为分值。</span>
+        <span class="n">start_ip</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">row</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>             
+        <span class="k">if</span> <span class="s">&#39;i&#39;</span> <span class="ow">in</span> <span class="n">start_ip</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="s">&#39;.&#39;</span> <span class="ow">in</span> <span class="n">start_ip</span><span class="p">:</span>                            
+            <span class="n">start_ip</span> <span class="o">=</span> <span class="n">ip_to_score</span><span class="p">(</span><span class="n">start_ip</span><span class="p">)</span>           
+        <span class="k">elif</span> <span class="n">start_ip</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>                       
+            <span class="n">start_ip</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">start_ip</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>               
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c"># 略过文件的第一行以及格式不正确的条目。</span>
+            <span class="k">continue</span>                                  
+
+        <span class="c"># 构建唯一城市ID。</span>
+        <span class="n">city_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="s">&#39;_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>            
+        <span class="c"># 将城市ID及其对应的IP地址分值添加到有序集合里面。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;ip2cityid:&#39;</span><span class="p">,</span> <span class="n">city_id</span><span class="p">,</span> <span class="n">start_ip</span><span class="p">)</span> 
+<span class="c"># &lt;end id=&quot;_1314_14473_9191&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-11</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9194&quot;/&gt;</span>
+<span class="c"># 这个函数在执行时需要给定GeoLiteCity-Location.csv文件所在的位置。</span>
+<span class="k">def</span> <span class="nf">import_cities_to_redis</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">filename</span><span class="p">):</span>  
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>
+            <span class="k">continue</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;latin-1&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">row</span><span class="p">]</span>
+        <span class="c"># 准备好需要添加到散列里面的信息。</span>
+        <span class="n">city_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>                          
+        <span class="n">country</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>                           
+        <span class="n">region</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>                            
+        <span class="n">city</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>                             
+        <span class="c"># 将城市信息添加到Redis里面。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;cityid2city:&#39;</span><span class="p">,</span> <span class="n">city_id</span><span class="p">,</span> 
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="n">city</span><span class="p">,</span> <span class="n">region</span><span class="p">,</span> <span class="n">country</span><span class="p">]))</span> 
+<span class="c"># &lt;end id=&quot;_1314_14473_9194&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-12</span>
+<span class="c"># &lt;start id=&quot;_1314_14473_9197&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">find_city_by_ip</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">ip_address</span><span class="p">):</span>
+    <span class="c"># 将IP地址转换为分值以便执行ZREVRANGEBYSCORE命令。</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ip_address</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>                        <span class="c">#A</span>
+        <span class="n">ip_address</span> <span class="o">=</span> <span class="n">ip_to_score</span><span class="p">(</span><span class="n">ip_address</span><span class="p">)</span>               <span class="c">#A</span>
+
+    <span class="c"># 查找唯一城市ID。</span>
+    <span class="n">city_id</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrevrangebyscore</span><span class="p">(</span>                       <span class="c">#B</span>
+        <span class="s">&#39;ip2cityid:&#39;</span><span class="p">,</span> <span class="n">ip_address</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>       <span class="c">#B</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">city_id</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">None</span>
+
+    <span class="c"># 将唯一城市ID转换为普通城市ID。</span>
+    <span class="n">city_id</span> <span class="o">=</span> <span class="n">city_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s">&#39;_&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>                 <span class="c">#C</span>
+    <span class="c"># 从散列里面取出城市信息。</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="s">&#39;cityid2city:&#39;</span><span class="p">,</span> <span class="n">city_id</span><span class="p">))</span>  <span class="c">#D</span>
+<span class="c"># &lt;end id=&quot;_1314_14473_9197&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-13</span>
+<span class="c"># &lt;start id=&quot;is_under_maintenance&quot;/&gt;</span>
+<span class="n">LAST_CHECKED</span> <span class="o">=</span> <span class="bp">None</span>
+<span class="n">IS_UNDER_MAINTENANCE</span> <span class="o">=</span> <span class="bp">False</span>
+
+<span class="k">def</span> <span class="nf">is_under_maintenance</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
+    <span class="c"># 将两个变量设置为全局变量以便在之后对它们进行写入。</span>
+    <span class="k">global</span> <span class="n">LAST_CHECKED</span><span class="p">,</span> <span class="n">IS_UNDER_MAINTENANCE</span>   <span class="c">#A</span>
+
+    <span class="c"># 距离上次检查是否已经超过1秒钟？</span>
+    <span class="k">if</span> <span class="n">LAST_CHECKED</span> <span class="o">&lt;</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>          <span class="c">#B</span>
+        <span class="c"># 更新最后检查时间。</span>
+        <span class="n">LAST_CHECKED</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>              <span class="c">#C</span>
+        <span class="c"># 检查系统是否正在进行维护。</span>
+        <span class="n">IS_UNDER_MAINTENANCE</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span>            <span class="c">#D</span>
+            <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;is-under-maintenance&#39;</span><span class="p">))</span>   <span class="c">#D</span>
+
+    <span class="c"># 返回一个布尔值，用于表示系统是否正在进行维护。</span>
+    <span class="k">return</span> <span class="n">IS_UNDER_MAINTENANCE</span>                 <span class="c">#E</span>
+<span class="c"># &lt;end id=&quot;is_under_maintenance&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-14</span>
+<span class="c"># &lt;start id=&quot;set_config&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">set_config</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="nb">type</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+        <span class="s">&#39;config:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="n">component</span><span class="p">),</span>
+        <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">config</span><span class="p">))</span>
+<span class="c"># &lt;end id=&quot;set_config&quot;/&gt;</span>
+<span class="c">#END</span>
+
+
+<span class="c"># 代码清单 5-15</span>
+<span class="c"># &lt;start id=&quot;get_config&quot;/&gt;</span>
+<span class="n">CONFIGS</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">CHECKED</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="k">def</span> <span class="nf">get_config</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="nb">type</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="s">&#39;config:</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="n">component</span><span class="p">)</span>
+
+    <span class="c"># 检查是否需要对这个组件的配置信息进行更新。</span>
+    <span class="k">if</span> <span class="n">CHECKED</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">wait</span><span class="p">:</span>     
+        <span class="c"># 有需要对配置进行更新，记录最后一次检查这个连接的时间。</span>
+        <span class="n">CHECKED</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> 
+        <span class="c"># 取得Redis存储的组件配置。</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="ow">or</span> <span class="s">&#39;{}&#39;</span><span class="p">)</span>    
+        <span class="c"># 将潜在的Unicode关键字参数转换为字符串关键字参数。</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">),</span> <span class="n">config</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">config</span><span class="p">)</span>
+        <span class="c"># 取得组件正在使用的配置。</span>
+        <span class="n">old_config</span> <span class="o">=</span> <span class="n">CONFIGS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>                  
+
+        <span class="c"># 如果两个配置并不相同……</span>
+        <span class="k">if</span> <span class="n">config</span> <span class="o">!=</span> <span class="n">old_config</span><span class="p">:</span>                    
+            <span class="c"># ……那么对组件的配置进行更新。</span>
+            <span class="n">CONFIGS</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">config</span>                     
+
+    <span class="k">return</span> <span class="n">CONFIGS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+<span class="c"># &lt;end id=&quot;get_config&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-16</span>
+<span class="c"># &lt;start id=&quot;redis_connection&quot;/&gt;</span>
+<span class="n">REDIS_CONNECTIONS</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="c"># 将应用组件的名字传递给装饰器。</span>
+<span class="k">def</span> <span class="nf">redis_connection</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>                        <span class="c">#A</span>
+    <span class="c"># 因为函数每次被调用都需要获取这个配置键，所以我们干脆把它缓存起来。</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="s">&#39;config:redis:&#39;</span> <span class="o">+</span> <span class="n">component</span>                           <span class="c">#B</span>
+    <span class="c"># 包装器接受一个函数作为参数，并使用另一个函数来包裹这个函数。</span>
+    <span class="k">def</span> <span class="nf">wrapper</span><span class="p">(</span><span class="n">function</span><span class="p">):</span>                                      <span class="c">#C</span>
+        <span class="c"># 将被包裹函数里的一些有用的元数据复制到配置处理器。</span>
+        <span class="nd">@functools.wraps</span><span class="p">(</span><span class="n">function</span><span class="p">)</span>                              <span class="c">#D</span>
+        <span class="c"># 创建负责管理连接信息的函数。</span>
+        <span class="k">def</span> <span class="nf">call</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>                              <span class="c">#E</span>
+            <span class="c"># 如果有旧配置存在，那么获取它。</span>
+            <span class="n">old_config</span> <span class="o">=</span> <span class="n">CONFIGS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">object</span><span class="p">())</span>             <span class="c">#F</span>
+            <span class="c"># 如果有新配置存在，那么获取它。</span>
+            <span class="n">_config</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span>                               <span class="c">#G</span>
+                <span class="n">config_connection</span><span class="p">,</span> <span class="s">&#39;redis&#39;</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">wait</span><span class="p">)</span>    <span class="c">#G</span>
+
+            <span class="n">config</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="c"># 对配置进行处理并将其用于创建Redis连接。</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">_config</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>                    <span class="c">#L</span>
+                <span class="n">config</span><span class="p">[</span><span class="n">k</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)]</span> <span class="o">=</span> <span class="n">v</span>                   <span class="c">#L</span>
+
+            <span class="c"># 如果新旧配置并不相同，那么创建新的连接。</span>
+            <span class="k">if</span> <span class="n">config</span> <span class="o">!=</span> <span class="n">old_config</span><span class="p">:</span>                            <span class="c">#H</span>
+                <span class="n">REDIS_CONNECTIONS</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="o">**</span><span class="n">config</span><span class="p">)</span>  <span class="c">#H</span>
+
+            <span class="c"># 将Redis连接以及其他匹配的参数传递给被包裹函数，然后调用函数并返回执行结果。</span>
+            <span class="k">return</span> <span class="n">function</span><span class="p">(</span>                                    <span class="c">#I</span>
+                <span class="n">REDIS_CONNECTIONS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">),</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>    <span class="c">#I</span>
+        <span class="c"># 返回被包裹的函数。</span>
+        <span class="k">return</span> <span class="n">call</span>                                             <span class="c">#J</span>
+    <span class="c"># 返回用于包裹Redis函数的包装器。</span>
+    <span class="k">return</span> <span class="n">wrapper</span>                                              <span class="c">#K</span>
+<span class="c"># &lt;end id=&quot;redis_connection&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 5-17</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># &lt;start id=&quot;recent_log_decorator&quot;/&gt;</span>
+<span class="sd">@redis_connection(&#39;logs&#39;)                   # redis_connection()装饰器非常容易使用。</span>
+<span class="sd">def log_recent(conn, app, message):         # 这个函数的定义和之前展示的一样，没有发生任何变化。</span>
+<span class="sd">    &#39;the old log_recent() code&#39;</span>
+
+<span class="sd">log_recent(&#39;main&#39;, &#39;User 235 logged in&#39;)    # 我们再也不必在调用log_recent()函数时手动地向它传递日志服务器的连接了。</span>
+<span class="sd"># &lt;end id=&quot;recent_log_decorator&quot;/&gt;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="c">#--------------- 以下是用于测试代码的辅助函数 --------------------------------</span>
+
+<span class="k">class</span> <span class="nc">request</span><span class="p">:</span>
+    <span class="k">pass</span>
+
+<span class="c"># a faster version with pipelines for actual testing</span>
+<span class="k">def</span> <span class="nf">import_ips_to_redis</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">filename</span><span class="p">):</span>
+    <span class="n">csv_file</span> <span class="o">=</span> <span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">))</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">count</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">csv_file</span><span class="p">):</span>
+        <span class="n">start_ip</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">row</span> <span class="k">else</span> <span class="s">&#39;&#39;</span>
+        <span class="k">if</span> <span class="s">&#39;i&#39;</span> <span class="ow">in</span> <span class="n">start_ip</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="s">&#39;.&#39;</span> <span class="ow">in</span> <span class="n">start_ip</span><span class="p">:</span>
+            <span class="n">start_ip</span> <span class="o">=</span> <span class="n">ip_to_score</span><span class="p">(</span><span class="n">start_ip</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">start_ip</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>
+            <span class="n">start_ip</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">start_ip</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">city_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="s">&#39;_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;ip2cityid:&#39;</span><span class="p">,</span> <span class="n">city_id</span><span class="p">,</span> <span class="n">start_ip</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">count</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">1000</span><span class="p">:</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+<span class="k">def</span> <span class="nf">import_cities_to_redis</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">filename</span><span class="p">):</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">count</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">))):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>
+            <span class="k">continue</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s">&#39;latin-1&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">row</span><span class="p">]</span>
+        <span class="n">city_id</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">country</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">region</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">city</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;cityid2city:&#39;</span><span class="p">,</span> <span class="n">city_id</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="n">city</span><span class="p">,</span> <span class="n">region</span><span class="p">,</span> <span class="n">country</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">count</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">1000</span><span class="p">:</span>
+            <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+
+<span class="k">class</span> <span class="nc">TestCh05</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">global</span> <span class="n">config_connection</span>
+        <span class="kn">import</span> <span class="nn">redis</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">config_connection</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">tearDown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+        <span class="k">global</span> <span class="n">config_connection</span><span class="p">,</span> <span class="n">QUIT</span><span class="p">,</span> <span class="n">SAMPLE_COUNT</span>
+        <span class="n">config_connection</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="n">QUIT</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="n">SAMPLE_COUNT</span> <span class="o">=</span> <span class="mi">100</span>
+        <span class="k">print</span>
+        <span class="k">print</span>
+
+    <span class="k">def</span> <span class="nf">test_log_recent</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pprint</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s write a few logs to the recent log&quot;</span>
+        <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+            <span class="n">log_recent</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;this is message </span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">recent</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">lrange</span><span class="p">(</span><span class="s">&#39;recent:test:info&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;The current recent message log has this many messages:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">recent</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Those messages include:&quot;</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">recent</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">recent</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">5</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_log_common</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pprint</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s write some items to the common log&quot;</span>
+        <span class="k">for</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">count</span><span class="p">):</span>
+                <span class="n">log_common</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&quot;message-</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="n">count</span><span class="p">)</span>
+        <span class="n">common</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrevrange</span><span class="p">(</span><span class="s">&#39;common:test:info&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;The current number of common messages is:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">common</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Those common messages are:&quot;</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">common</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">common</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">5</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_counters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pprint</span>
+        <span class="k">global</span> <span class="n">QUIT</span><span class="p">,</span> <span class="n">SAMPLE_COUNT</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s update some counters for now and a little in the future&quot;</span>
+        <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">delta</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+            <span class="n">update_counter</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">random</span><span class="o">.</span><span class="n">randrange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">5</span><span class="p">),</span> <span class="n">now</span><span class="o">=</span><span class="n">now</span><span class="o">+</span><span class="n">delta</span><span class="p">)</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">get_counter</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;We have some per-second counters:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">get_counter</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;We have some per-5-second counters:&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;These counters include:&quot;</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">counter</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="n">tt</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span>
+        <span class="k">def</span> <span class="nf">new_tt</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">tt</span><span class="p">()</span> <span class="o">+</span> <span class="mi">2</span><span class="o">*</span><span class="mi">86400</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">new_tt</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s clean out some counters by setting our sample count to 0&quot;</span>
+        <span class="n">SAMPLE_COUNT</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">clean_counters</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">conn</span><span class="p">,))</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">setDaemon</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="c"># to make sure it dies if we ctrl+C quit</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">QUIT</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">tt</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">get_counter</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">86400</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Did we clean out all of the counters?&quot;</span><span class="p">,</span> <span class="ow">not</span> <span class="n">counter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pprint</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s add some data for our statistics!&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="n">update_stats</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;temp&#39;</span><span class="p">,</span> <span class="s">&#39;example&#39;</span><span class="p">,</span> <span class="n">random</span><span class="o">.</span><span class="n">randrange</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">15</span><span class="p">))</span>
+        <span class="k">print</span> <span class="s">&quot;We have some aggregate statistics:&quot;</span><span class="p">,</span> <span class="n">r</span>
+        <span class="n">rr</span> <span class="o">=</span> <span class="n">get_stats</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;temp&#39;</span><span class="p">,</span> <span class="s">&#39;example&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Which we can also fetch manually:&quot;</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">rr</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">rr</span><span class="p">[</span><span class="s">&#39;count&#39;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">5</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_access_time</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">pprint</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s calculate some access times...&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">access_time</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&quot;req-</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="n">i</span><span class="p">):</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mi">5</span> <span class="o">+</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">())</span>
+        <span class="k">print</span> <span class="s">&quot;The slowest access times are:&quot;</span>
+        <span class="n">atimes</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrevrange</span><span class="p">(</span><span class="s">&#39;slowest:AccessTime&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">atimes</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">atimes</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="k">def</span> <span class="nf">cb</span><span class="p">():</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">())</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s use the callback version...&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+            <span class="n">request</span><span class="o">.</span><span class="n">path</span> <span class="o">=</span> <span class="s">&#39;cbreq-</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">i</span>
+            <span class="n">process_view</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">cb</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;The slowest access times are:&quot;</span>
+        <span class="n">atimes</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrevrange</span><span class="p">(</span><span class="s">&#39;slowest:AccessTime&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">atimes</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">atimes</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_ip_lookup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">open</span><span class="p">(</span><span class="s">&#39;GeoLiteCity-Blocks.csv&#39;</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)</span>
+            <span class="nb">open</span><span class="p">(</span><span class="s">&#39;GeoLiteCity-Location.csv&#39;</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s">&quot;********&quot;</span>
+            <span class="k">print</span> <span class="s">&quot;You do not have the GeoLiteCity database available, aborting test&quot;</span>
+            <span class="k">print</span> <span class="s">&quot;Please have the following two files in the current path:&quot;</span>
+            <span class="k">print</span> <span class="s">&quot;GeoLiteCity-Blocks.csv&quot;</span>
+            <span class="k">print</span> <span class="s">&quot;GeoLiteCity-Location.csv&quot;</span>
+            <span class="k">print</span> <span class="s">&quot;********&quot;</span>
+            <span class="k">return</span>
+
+        <span class="k">print</span> <span class="s">&quot;Importing IP addresses to Redis... (this may take a while)&quot;</span>
+        <span class="n">import_ips_to_redis</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;GeoLiteCity-Blocks.csv&#39;</span><span class="p">)</span>
+        <span class="n">ranges</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zcard</span><span class="p">(</span><span class="s">&#39;ip2cityid:&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Loaded ranges into Redis:&quot;</span><span class="p">,</span> <span class="n">ranges</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">ranges</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="k">print</span> <span class="s">&quot;Importing Location lookups to Redis... (this may take a while)&quot;</span>
+        <span class="n">import_cities_to_redis</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;GeoLiteCity-Location.csv&#39;</span><span class="p">)</span>
+        <span class="n">cities</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hlen</span><span class="p">(</span><span class="s">&#39;cityid2city:&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Loaded city lookups into Redis:&quot;</span><span class="p">,</span> <span class="n">cities</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">cities</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">)</span>
+        <span class="k">print</span>
+
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s lookup some locations!&quot;</span>
+        <span class="n">rr</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randrange</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+            <span class="k">print</span> <span class="n">find_city_by_ip</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">rr</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">255</span><span class="p">),</span> <span class="n">rr</span><span class="p">(</span><span class="mi">256</span><span class="p">),</span> <span class="n">rr</span><span class="p">(</span><span class="mi">256</span><span class="p">),</span> <span class="n">rr</span><span class="p">(</span><span class="mi">256</span><span class="p">)))</span>
+
+    <span class="k">def</span> <span class="nf">test_is_under_maintenance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">print</span> <span class="s">&quot;Are we under maintenance (we shouldn&#39;t be)?&quot;</span><span class="p">,</span> <span class="n">is_under_maintenance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s">&#39;is-under-maintenance&#39;</span><span class="p">,</span> <span class="s">&#39;yes&#39;</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;We cached this, so it should be the same:&quot;</span><span class="p">,</span> <span class="n">is_under_maintenance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;But after a sleep, it should change:&quot;</span><span class="p">,</span> <span class="n">is_under_maintenance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Cleaning up...&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;is-under-maintenance&#39;</span><span class="p">)</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&quot;Should be False again:&quot;</span><span class="p">,</span> <span class="n">is_under_maintenance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_config</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">print</span> <span class="s">&quot;Let&#39;s set a config and then get a connection from that config...&quot;</span>
+        <span class="n">set_config</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;redis&#39;</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s">&#39;db&#39;</span><span class="p">:</span><span class="mi">15</span><span class="p">})</span>
+        <span class="nd">@redis_connection</span><span class="p">(</span><span class="s">&#39;test&#39;</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">test</span><span class="p">(</span><span class="n">conn2</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">conn2</span><span class="o">.</span><span class="n">info</span><span class="p">())</span>
+        <span class="k">print</span> <span class="s">&quot;We can run commands from the configured connection:&quot;</span><span class="p">,</span> <span class="n">test</span><span class="p">()</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="chapter6.html" title="第 6 章相关源代码"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="chapter4.html" title="第 4 章相关源代码"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

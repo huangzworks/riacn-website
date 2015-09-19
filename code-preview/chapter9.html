@@ -1,0 +1,674 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>第 9 章相关源代码 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="../index.html" />
+    <link rel="next" title="第 10 章相关源代码" href="chapter10.html" />
+    <link rel="prev" title="第 8 章相关源代码" href="chapter8.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="chapter10.html" title="第 10 章相关源代码"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chapter8.html" title="第 8 章相关源代码"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>第 9 章相关源代码<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="kn">import</span> <span class="nn">binascii</span>
+<span class="kn">import</span> <span class="nn">bisect</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">date</span><span class="p">,</span> <span class="n">timedelta</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">unittest</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+
+<span class="kn">import</span> <span class="nn">redis</span>
+
+<span class="k">def</span> <span class="nf">readblocks</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">blocksize</span><span class="o">=</span><span class="mi">2</span><span class="o">**</span><span class="mi">17</span><span class="p">):</span>
+    <span class="n">lb</span> <span class="o">=</span> <span class="n">blocksize</span>
+    <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="n">lb</span> <span class="o">==</span> <span class="n">blocksize</span><span class="p">:</span>                                  <span class="c">#A</span>
+        <span class="n">block</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">substr</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">blocksize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>  <span class="c">#B</span>
+        <span class="k">yield</span> <span class="n">block</span>                                         <span class="c">#C</span>
+        <span class="n">lb</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>                                     <span class="c">#C</span>
+        <span class="n">pos</span> <span class="o">+=</span> <span class="n">lb</span>                                           <span class="c">#C</span>
+    <span class="k">yield</span> <span class="s">&#39;&#39;</span>
+
+<span class="c"># 代码清单 9-1</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># &lt;start id=&quot;ziplist-configuration-options&quot;/&gt;</span>
+<span class="sd">list-max-ziplist-entries 512    # 列表结构使用压缩列表表示的限制条件。</span>
+<span class="sd">list-max-ziplist-value 64       #</span>
+
+<span class="sd">hash-max-ziplist-entries 512    # 散列结构使用压缩列表表示的限制条件</span>
+<span class="sd">hash-max-ziplist-value 64       #（Redis 2.6 以前的版本会为散列结构使用不同的编码表示，并且选项的名字也与此不同）。</span>
+
+<span class="sd">zset-max-ziplist-entries 128    # 有序集合使用压缩列表表示的限制条件。</span>
+<span class="sd">zset-max-ziplist-value 64       #</span>
+<span class="sd"># &lt;end id=&quot;ziplist-configuration-options&quot;/&gt;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># &lt;start id=&quot;ziplist-test&quot;/&gt;</span>
+<span class="sd">&gt;&gt;&gt; conn.rpush(&#39;test&#39;, &#39;a&#39;, &#39;b&#39;, &#39;c&#39;, &#39;d&#39;)  # 首先将四个元素推入到列表。</span>
+<span class="sd">4                                           #</span>
+<span class="sd">&gt;&gt;&gt; conn.debug_object(&#39;test&#39;)                                       # debug object 命令可以查看特定对象的相关信息。</span>
+<span class="sd">{&#39;encoding&#39;: &#39;ziplist&#39;, &#39;refcount&#39;: 1, &#39;lru_seconds_idle&#39;: 20,      # “encoding”信息表示这个对象的编码为压缩列表，</span>
+<span class="sd">&#39;lru&#39;: 274841, &#39;at&#39;: &#39;0xb6c9f120&#39;, &#39;serializedlength&#39;: 24,          # 这个压缩列表占用了 24 字节内存。</span>
+<span class="sd">&#39;type&#39;: &#39;Value&#39;}                                                    #</span>
+<span class="sd">&gt;&gt;&gt; conn.rpush(&#39;test&#39;, &#39;e&#39;, &#39;f&#39;, &#39;g&#39;, &#39;h&#39;)  # 再将四个元素推入到列表。</span>
+<span class="sd">8                                           #</span>
+<span class="sd">&gt;&gt;&gt; conn.debug_object(&#39;test&#39;)</span>
+<span class="sd">{&#39;encoding&#39;: &#39;ziplist&#39;, &#39;refcount&#39;: 1, &#39;lru_seconds_idle&#39;: 0,   # 对象的编码依然是压缩列表，只是体积增长到了 36 字节</span>
+<span class="sd">&#39;lru&#39;: 274846, &#39;at&#39;: &#39;0xb6c9f120&#39;, &#39;serializedlength&#39;: 36,      # （前面推入的四个元素，每个元素都需要花费 1 字节进行储存，并带来 2 字节的额外消耗）。</span>
+<span class="sd">&#39;type&#39;: &#39;Value&#39;}</span>
+<span class="sd">&gt;&gt;&gt; conn.rpush(&#39;test&#39;, 65*&#39;a&#39;)          # 当一个超出编码允许大小的元素被推入到列表里面的时候，</span>
+<span class="sd">9                                       # 列表将从压缩列表编码转换为标准的链表。</span>
+<span class="sd">&gt;&gt;&gt; conn.debug_object(&#39;test&#39;)</span>
+<span class="sd">{&#39;encoding&#39;: &#39;linkedlist&#39;, &#39;refcount&#39;: 1, &#39;lru_seconds_idle&#39;: 10,   # 尽管序列化长度下降了，</span>
+<span class="sd">&#39;lru&#39;: 274851, &#39;at&#39;: &#39;0xb6c9f120&#39;, &#39;serializedlength&#39;: 30,          # 但是对于压缩列表编码以及集合的特殊编码之外的其他编码来说，这个数值并不代表结构的实际内存占用量。</span>
+<span class="sd">&#39;type&#39;: &#39;Value&#39;}</span>
+<span class="sd">&gt;&gt;&gt; conn.rpop(&#39;test&#39;)                                               # 当压缩列表被转换为普通的结构之后，</span>
+<span class="sd">&#39;aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&#39; # 即使结构将来重新满足配置设置的限制条件，</span>
+<span class="sd">&gt;&gt;&gt; conn.debug_object(&#39;test&#39;)                                       # 结构也不会转换回压缩列表。</span>
+<span class="sd">{&#39;encoding&#39;: &#39;linkedlist&#39;, &#39;refcount&#39;: 1, &#39;lru_seconds_idle&#39;: 0,    #</span>
+<span class="sd">&#39;lru&#39;: 274853, &#39;at&#39;: &#39;0xb6c9f120&#39;, &#39;serializedlength&#39;: 17,</span>
+<span class="sd">&#39;type&#39;: &#39;Value&#39;}</span>
+<span class="sd"># &lt;end id=&quot;ziplist-test&quot;/&gt;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># &lt;start id=&quot;intset-configuration-option&quot;/&gt;</span>
+<span class="sd">set-max-intset-entries 512      # 集合使用整数集合表示的限制条件。</span>
+<span class="sd"># &lt;end id=&quot;intset-configuration-option&quot;/&gt;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># &lt;start id=&quot;intset-test&quot;/&gt;</span>
+<span class="sd">&gt;&gt;&gt; conn.sadd(&#39;set-object&#39;, *range(500))                        # 即使向集合添加 500 个元素，</span>
+<span class="sd">500                                                             # 它的编码仍然为整数集合。</span>
+<span class="sd">&gt;&gt;&gt; conn.debug_object(&#39;set-object&#39;)                             #</span>
+<span class="sd">{&#39;encoding&#39;: &#39;intset&#39;, &#39;refcount&#39;: 1, &#39;lru_seconds_idle&#39;: 0,    #</span>
+<span class="sd">&#39;lru&#39;: 283116, &#39;at&#39;: &#39;0xb6d1a1c0&#39;, &#39;serializedlength&#39;: 1010,</span>
+<span class="sd">&#39;type&#39;: &#39;Value&#39;}</span>
+<span class="sd">&gt;&gt;&gt; conn.sadd(&#39;set-object&#39;, *range(500, 1000))                  # 当集合的元素数量超过限定的 512 个时，</span>
+<span class="sd">500                                                             # 整数集合将被转换为散列表表示。</span>
+<span class="sd">&gt;&gt;&gt; conn.debug_object(&#39;set-object&#39;)                             #</span>
+<span class="sd">{&#39;encoding&#39;: &#39;hashtable&#39;, &#39;refcount&#39;: 1, &#39;lru_seconds_idle&#39;: 0, #</span>
+<span class="sd">&#39;lru&#39;: 283118, &#39;at&#39;: &#39;0xb6d1a1c0&#39;, &#39;serializedlength&#39;: 2874,</span>
+<span class="sd">&#39;type&#39;: &#39;Value&#39;}</span>
+<span class="sd"># &lt;end id=&quot;intset-test&quot;/&gt;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="c"># &lt;start id=&quot;rpoplpush-benchmark&quot;/&gt;</span>
+<span class="c"># 为了以不同的方式进行性能测试，函数需要对所有测试指标进行参数化处理。</span>
+<span class="k">def</span> <span class="nf">long_ziplist_performance</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">passes</span><span class="p">,</span> <span class="n">psize</span><span class="p">):</span> 
+    <span class="c"># 删除指定的键，确保被测试数据的准确性。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>                    
+    <span class="c"># 通过从右端推入指定数量的元素来对列表进行初始化。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">rpush</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="n">length</span><span class="p">))</span>     
+    <span class="c"># 通过流水线来降低网络通信给测试带来的影响。</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>     
+
+    <span class="c"># 启动计时器。</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>                     
+    <span class="c"># 根据 passes 参数来决定流水线操作的执行次数。</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">passes</span><span class="p">):</span>           
+        <span class="c"># 每个流水线操作都包含了 psize 次 RPOPLPUSH 命令调用。</span>
+        <span class="k">for</span> <span class="n">pi</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">psize</span><span class="p">):</span>        
+            <span class="c"># 每个 rpoplpush() 函数调用都会将列表最右端的元素弹出，</span>
+            <span class="c"># 并将它推入到同一个列表的左端。</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">rpoplpush</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+        <span class="c"># 执行 psize 次 RPOPLPUSH 命令。</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>              
+
+    <span class="c"># 计算每秒钟执行的 RPOPLPUSH 调用数量。</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">passes</span> <span class="o">*</span> <span class="n">psize</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t</span> <span class="ow">or</span> <span class="o">.</span><span class="mo">001</span><span class="p">)</span> 
+<span class="c"># &lt;end id=&quot;rpoplpush-benchmark&quot;/&gt;</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># &lt;start id=&quot;rpoplpush-performance&quot;/&gt;</span>
+<span class="sd">&gt;&gt;&gt; long_ziplist_performance(conn, &#39;list&#39;, 1, 1000, 100)        # 当压缩列表编码的列表包含的节点数量不超过 1000 个时，</span>
+<span class="sd">52093.558416505381                                              # Redis 每秒钟可以执行大约五万次操作。</span>
+<span class="sd">&gt;&gt;&gt; long_ziplist_performance(conn, &#39;list&#39;, 100, 1000, 100)      #</span>
+<span class="sd">51501.154762768667                                              #</span>
+<span class="sd">&gt;&gt;&gt; long_ziplist_performance(conn, &#39;list&#39;, 1000, 1000, 100)     #</span>
+<span class="sd">49732.490843316067                                              #</span>
+<span class="sd">&gt;&gt;&gt; long_ziplist_performance(conn, &#39;list&#39;, 5000, 1000, 100)     # 当压缩列表编码的列表包含的节点数量超过 5000 个时，</span>
+<span class="sd">43424.056529592635                                              # 内存复制带来的消耗就会越来越大，</span>
+<span class="sd">&gt;&gt;&gt; long_ziplist_performance(conn, &#39;list&#39;, 10000, 1000, 100)    # 导致性能下降。</span>
+<span class="sd">36727.062573334966                                              #</span>
+<span class="sd">&gt;&gt;&gt; long_ziplist_performance(conn, &#39;list&#39;, 50000, 1000, 100)    # 当压缩列表的节点数量达到 5000 个时，</span>
+<span class="sd">16695.140684975777                                              # 性能出现明显下降。</span>
+<span class="sd">&gt;&gt;&gt; long_ziplist_performance(conn, &#39;list&#39;, 100000, 500, 100)    # 当节点数量达到十万个时，</span>
+<span class="sd">553.10821080054586                                              # 压缩列表的性能低得根本没法用了。</span>
+<span class="sd"># &lt;end id=&quot;rpoplpush-performance&quot;/&gt;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="k">def</span> <span class="nf">long_ziplist_index</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">passes</span><span class="p">,</span> <span class="n">psize</span><span class="p">):</span> <span class="c">#A</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>                    <span class="c">#B</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">rpush</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="n">length</span><span class="p">))</span>     <span class="c">#C</span>
+    <span class="n">length</span> <span class="o">&gt;&gt;=</span> <span class="mi">1</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>     <span class="c">#D</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>                     <span class="c">#E</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">passes</span><span class="p">):</span>            <span class="c">#F</span>
+        <span class="k">for</span> <span class="n">pi</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">psize</span><span class="p">):</span>        <span class="c">#G</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">lindex</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span><span class="c">#H</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>              <span class="c">#I</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">passes</span> <span class="o">*</span> <span class="n">psize</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t</span> <span class="ow">or</span> <span class="o">.</span><span class="mo">001</span><span class="p">)</span> <span class="c">#J</span>
+
+<span class="k">def</span> <span class="nf">long_intset_performance</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">passes</span><span class="p">,</span> <span class="n">psize</span><span class="p">):</span> <span class="c">#A</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>                    <span class="c">#B</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="mi">1000000</span><span class="p">,</span> <span class="mi">1000000</span><span class="o">+</span><span class="n">length</span><span class="p">))</span>     <span class="c">#C</span>
+    <span class="n">cur</span> <span class="o">=</span> <span class="mi">1000000</span><span class="o">-</span><span class="mi">1</span>
+    <span class="n">pipeline</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>     <span class="c">#D</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>                     <span class="c">#E</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">passes</span><span class="p">):</span>            <span class="c">#F</span>
+        <span class="k">for</span> <span class="n">pi</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">psize</span><span class="p">):</span>        <span class="c">#G</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">spop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span><span class="c">#H</span>
+            <span class="n">pipeline</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">cur</span><span class="p">)</span>
+            <span class="n">cur</span> <span class="o">-=</span> <span class="mi">1</span>
+        <span class="n">pipeline</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>              <span class="c">#I</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">passes</span> <span class="o">*</span> <span class="n">psize</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t</span> <span class="ow">or</span> <span class="o">.</span><span class="mo">001</span><span class="p">)</span> <span class="c">#J</span>
+
+
+<span class="c"># 代码清单 9-7</span>
+<span class="c"># &lt;start id=&quot;calculate-shard-key&quot;/&gt;</span>
+<span class="c"># 在调用 shard_key() 函数时，</span>
+<span class="c"># 用户需要给定基础散列的名字、将要被储存到分片散列里面的键、预计的元素总数量以及请求的分片数量。</span>
+<span class="k">def</span> <span class="nf">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">total_elements</span><span class="p">,</span> <span class="n">shard_size</span><span class="p">):</span>  
+    <span class="c"># 如果值是一个整数或者一个看上去像是整数的字符串，</span>
+    <span class="c"># 那么它将被直接用于计算分片 ID 。</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">long</span><span class="p">))</span> <span class="ow">or</span> <span class="n">key</span><span class="o">.</span><span class="n">isdigit</span><span class="p">():</span>  
+        <span class="c"># 整数键将被程序假定为连续指派的 ID ，</span>
+        <span class="c"># 并基于这个整数 ID 的二进制位的高位来选择分片 ID 。</span>
+        <span class="c"># 此外，程序在进行整数转换的时候还使用了显式的基数（以及 str()`` 函数），</span>
+        <span class="c"># 使得键 010 可以被转换为 10 ，而不是 8 。</span>
+        <span class="n">shard_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">key</span><span class="p">),</span> <span class="mi">10</span><span class="p">)</span> <span class="o">//</span> <span class="n">shard_size</span>     
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># 对于不是整数的键，</span>
+        <span class="c"># 程序将基于预计的元素总数量以及请求的分片数量，</span>
+        <span class="c"># 计算出实际所需的分片总数量。</span>
+        <span class="n">shards</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">total_elements</span> <span class="o">//</span> <span class="n">shard_size</span>      
+        <span class="c"># 在得知了分片的数量之后，</span>
+        <span class="c"># 程序就可以通过计算键的散列值与分片数量之间的模数来得到分片 ID 。</span>
+        <span class="n">shard_id</span> <span class="o">=</span> <span class="n">binascii</span><span class="o">.</span><span class="n">crc32</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="o">%</span> <span class="n">shards</span>         
+    <span class="c"># 最后，程序会把基础键和分片 ID 组合在一起，得出分片键。</span>
+    <span class="k">return</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">:</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">shard_id</span><span class="p">)</span>                    
+<span class="c"># &lt;end id=&quot;calculate-shard-key&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-8</span>
+<span class="c"># &lt;start id=&quot;sharded-hset-hget&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">shard_hset</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">base</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">total_elements</span><span class="p">,</span> <span class="n">shard_size</span><span class="p">):</span>
+    <span class="c"># 计算出应该由哪个分片来储存值。</span>
+    <span class="n">shard</span> <span class="o">=</span> <span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">total_elements</span><span class="p">,</span> <span class="n">shard_size</span><span class="p">)</span>   
+    <span class="c"># 将值储存到分片里面。</span>
+    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="n">shard</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>                        
+
+<span class="k">def</span> <span class="nf">shard_hget</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">base</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">total_elements</span><span class="p">,</span> <span class="n">shard_size</span><span class="p">):</span>
+    <span class="c"># 计算出值可能被储存到了哪个分片里面。</span>
+    <span class="n">shard</span> <span class="o">=</span> <span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">total_elements</span><span class="p">,</span> <span class="n">shard_size</span><span class="p">)</span>    
+    <span class="c"># 取得储存在分片里面的值。</span>
+    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="n">shard</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>                               
+<span class="c"># &lt;end id=&quot;sharded-hset-hget&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-9</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd"># &lt;start id=&quot;sharded-ip-lookup&quot;/&gt;</span>
+<span class="sd">TOTAL_SIZE = 320000                                             # 把传递给分片函数的参数设置为全局常量，</span>
+<span class="sd">SHARD_SIZE = 1024                                               # 确保每次传递的值总是相同的。</span>
+
+<span class="sd">def import_cities_to_redis(conn, filename):</span>
+<span class="sd">    for row in csv.reader(open(filename)):</span>
+<span class="sd">        ...</span>
+<span class="sd">        shard_hset(conn, &#39;cityid2city:&#39;, city_id,               # 为了对数据进行设置，用户需要传递 TOTAL_SIZE 参数和 SHARD_SIZE 参数。</span>
+<span class="sd">            json.dumps([city, region, country]),                # 不过因为这个程序处理的 ID 都是数字，</span>
+<span class="sd">            TOTAL_SIZE, SHARD_SIZE)                             # 所以 TOTAL_SIZE 实际上并没有被使用。</span>
+
+<span class="sd">def find_city_by_ip(conn, ip_address):</span>
+<span class="sd">    ...</span>
+<span class="sd">    data = shard_hget(conn, &#39;cityid2city:&#39;, city_id,            # 程序在获取数据时，</span>
+<span class="sd">        TOTAL_SIZE, SHARD_SIZE)                                 # 需要根据相同的 TOTAL_SIZE 参数和 SHARD_SIZE 参数查找被分片的键。</span>
+<span class="sd">    return json.loads(data)</span>
+<span class="sd"># &lt;end id=&quot;sharded-ip-lookup&quot;/&gt;</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+
+<span class="c"># 代码清单 9-10</span>
+<span class="c"># &lt;start id=&quot;sharded-sadd&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">shard_sadd</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">base</span><span class="p">,</span> <span class="n">member</span><span class="p">,</span> <span class="n">total_elements</span><span class="p">,</span> <span class="n">shard_size</span><span class="p">):</span>
+    <span class="n">shard</span> <span class="o">=</span> <span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span>
+        <span class="c"># 计算成员应该被储存到哪个分片集合里面；</span>
+        <span class="c"># 因为成员并非连续 ID ，所以程序在计算成员所属的分片之前，会先将成员转换为字符串。</span>
+        <span class="s">&#39;x&#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">member</span><span class="p">),</span> <span class="n">total_elements</span><span class="p">,</span> <span class="n">shard_size</span><span class="p">)</span>           
+    <span class="c"># 将成员储存到分片里面。</span>
+    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">shard</span><span class="p">,</span> <span class="n">member</span><span class="p">)</span>                            
+<span class="c"># &lt;end id=&quot;sharded-sadd&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-11</span>
+<span class="c"># &lt;start id=&quot;unique-visitor-count&quot;/&gt;</span>
+<span class="c"># 为整数集合编码的集合预设一个典型的分片大小。</span>
+<span class="n">SHARD_SIZE</span> <span class="o">=</span> <span class="mi">512</span>                       
+
+<span class="k">def</span> <span class="nf">count_visit</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">session_id</span><span class="p">):</span>
+    <span class="c"># 取得当天的日期，并生成唯一访客计数器的键。</span>
+    <span class="n">today</span> <span class="o">=</span> <span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span>                               
+    <span class="n">key</span> <span class="o">=</span> <span class="s">&#39;unique:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">today</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span>                
+    <span class="c"># 计算或者获取当天的预计唯一访客人数。</span>
+    <span class="n">expected</span> <span class="o">=</span> <span class="n">get_expected</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">today</span><span class="p">)</span>          
+ 
+    <span class="c"># 根据 128 位的 UUID ，计算出一个 56 位的 ID 。</span>
+    <span class="nb">id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">session_id</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;-&#39;</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)[:</span><span class="mi">15</span><span class="p">],</span> <span class="mi">16</span><span class="p">)</span>     
+    <span class="c"># 将 ID 添加到分片集合里面。</span>
+    <span class="k">if</span> <span class="n">shard_sadd</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="n">expected</span><span class="p">,</span> <span class="n">SHARD_SIZE</span><span class="p">):</span> 
+        <span class="c"># 如果 ID 在分片集合里面并不存在，那么对唯一访客计数器执行加一操作。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>                                  
+<span class="c"># &lt;end id=&quot;unique-visitor-count&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-12</span>
+<span class="c"># &lt;start id=&quot;expected-viewer-count&quot;/&gt;</span>
+<span class="c"># 这个初始的预计每日访客人数会设置得稍微比较高一些。</span>
+<span class="n">DAILY_EXPECTED</span> <span class="o">=</span> <span class="mi">1000000</span>                               
+<span class="c"># 在本地储存一份计算得出的预计访客人数副本。</span>
+<span class="n">EXPECTED</span> <span class="o">=</span> <span class="p">{}</span>                                          
+
+<span class="k">def</span> <span class="nf">get_expected</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">today</span><span class="p">):</span>
+    <span class="c"># 如果程序已经计算出或者获取到了当日的预计访客人数，</span>
+    <span class="c"># 那么直接使用已计算出的数字。</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">EXPECTED</span><span class="p">:</span>                                
+        <span class="k">return</span> <span class="n">EXPECTED</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>                            
+ 
+    <span class="n">exkey</span> <span class="o">=</span> <span class="n">key</span> <span class="o">+</span> <span class="s">&#39;:expected&#39;</span>
+    <span class="c"># 如果其他客户端已经计算出了当日的预计访客人数，</span>
+    <span class="c"># 那么直接使用已计算出的数字。</span>
+    <span class="n">expected</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">exkey</span><span class="p">)</span>                         
+ 
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">expected</span><span class="p">:</span>
+        <span class="c"># 获取昨天的唯一访客人数，如果该数值不存在就使用默认值一百万。</span>
+        <span class="n">yesterday</span> <span class="o">=</span> <span class="p">(</span><span class="n">today</span> <span class="o">-</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span> 
+        <span class="n">expected</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;unique:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">yesterday</span><span class="p">)</span>          
+        <span class="n">expected</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">expected</span> <span class="ow">or</span> <span class="n">DAILY_EXPECTED</span><span class="p">)</span>          
+ 
+        <span class="c"># 基于“明天的访客人数至少会比今天的访客人数多 50%”这一假设，</span>
+        <span class="c"># 给昨天的访客人数加上 50% ，然后向上舍入至下一个底数为 2 的幂。</span>
+        <span class="n">expected</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">expected</span><span class="o">*</span><span class="mf">1.5</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span> 
+        <span class="c"># 将计算出的预计访客人数写入到 Redis 里面，以便其他程序在有需要时使用。</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">conn</span><span class="o">.</span><span class="n">setnx</span><span class="p">(</span><span class="n">exkey</span><span class="p">,</span> <span class="n">expected</span><span class="p">):</span>                 
+            <span class="c"># 如果在我们之前，</span>
+            <span class="c"># 已经有其他客户端储存了当日的预计访客人数，</span>
+            <span class="c"># 那么直接使用已储存的数字。</span>
+            <span class="n">expected</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">exkey</span><span class="p">)</span>                      
+ 
+    <span class="c"># 将当日的预计访客人数记录到本地副本里面，并将它返回给调用者。</span>
+    <span class="n">EXPECTED</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">expected</span><span class="p">)</span>                       
+    <span class="k">return</span> <span class="n">EXPECTED</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>                                
+<span class="c"># &lt;end id=&quot;expected-viewer-count&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-13</span>
+<span class="c"># &lt;start id=&quot;location-tables&quot;/&gt;</span>
+<span class="c"># 一个由 ISO3 国家编码组成的字符串表格，</span>
+<span class="c"># 调用 split() 函数会根据空白对这个字符串进行分割，</span>
+<span class="c"># 并将它转换为一个由国家编码组成的列表。</span>
+<span class="n">COUNTRIES</span> <span class="o">=</span> <span class="s">&#39;&#39;&#39;</span>
+<span class="s">ABW AFG AGO AIA ALA ALB AND ARE ARG ARM ASM ATA ATF ATG AUS AUT AZE BDI</span>
+<span class="s">BEL BEN BES BFA BGD BGR BHR BHS BIH BLM BLR BLZ BMU BOL BRA BRB BRN BTN</span>
+<span class="s">BVT BWA CAF CAN CCK CHE CHL CHN CIV CMR COD COG COK COL COM CPV CRI CUB</span>
+<span class="s">CUW CXR CYM CYP CZE DEU DJI DMA DNK DOM DZA ECU EGY ERI ESH ESP EST ETH</span>
+<span class="s">FIN FJI FLK FRA FRO FSM GAB GBR GEO GGY GHA GIB GIN GLP GMB GNB GNQ GRC</span>
+<span class="s">GRD GRL GTM GUF GUM GUY HKG HMD HND HRV HTI HUN IDN IMN IND IOT IRL IRN</span>
+<span class="s">IRQ ISL ISR ITA JAM JEY JOR JPN KAZ KEN KGZ KHM KIR KNA KOR KWT LAO LBN</span>
+<span class="s">LBR LBY LCA LIE LKA LSO LTU LUX LVA MAC MAF MAR MCO MDA MDG MDV MEX MHL</span>
+<span class="s">MKD MLI MLT MMR MNE MNG MNP MOZ MRT MSR MTQ MUS MWI MYS MYT NAM NCL NER</span>
+<span class="s">NFK NGA NIC NIU NLD NOR NPL NRU NZL OMN PAK PAN PCN PER PHL PLW PNG POL</span>
+<span class="s">PRI PRK PRT PRY PSE PYF QAT REU ROU RUS RWA SAU SDN SEN SGP SGS SHN SJM</span>
+<span class="s">SLB SLE SLV SMR SOM SPM SRB SSD STP SUR SVK SVN SWE SWZ SXM SYC SYR TCA</span>
+<span class="s">TCD TGO THA TJK TKL TKM TLS TON TTO TUN TUR TUV TWN TZA UGA UKR UMI URY</span>
+<span class="s">USA UZB VAT VCT VEN VGB VIR VNM VUT WLF WSM YEM ZAF ZMB ZWE&#39;&#39;&#39;</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+
+<span class="n">STATES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="c"># 加拿大的省信息和属地信息。</span>
+    <span class="s">&#39;CAN&#39;</span><span class="p">:</span><span class="s">&#39;&#39;&#39;AB BC MB NB NL NS NT NU ON PE QC SK YT&#39;&#39;&#39;</span><span class="o">.</span><span class="n">split</span><span class="p">(),</span>      
+    <span class="c"># 美国各个州的信息。</span>
+    <span class="s">&#39;USA&#39;</span><span class="p">:</span><span class="s">&#39;&#39;&#39;AA AE AK AL AP AR AS AZ CA CO CT DC DE FL FM GA GU HI IA ID</span>
+<span class="s">IL IN KS KY LA MA MD ME MH MI MN MO MP MS MT NC ND NE NH NJ NM NV NY OH</span>
+<span class="s">OK OR PA PR PW RI SC SD TN TX UT VA VI VT WA WI WV WY&#39;&#39;&#39;</span><span class="o">.</span><span class="n">split</span><span class="p">(),</span>     
+<span class="p">}</span>
+<span class="c"># &lt;end id=&quot;location-tables&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-14</span>
+<span class="c"># &lt;start id=&quot;location-to-code&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">get_code</span><span class="p">(</span><span class="n">country</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+    <span class="c"># 寻找国家对应的偏移量。</span>
+    <span class="n">cindex</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="n">COUNTRIES</span><span class="p">,</span> <span class="n">country</span><span class="p">)</span>             
+    <span class="c"># 没有找到指定的国家时，将索引设置为 -1 。</span>
+    <span class="k">if</span> <span class="n">cindex</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">COUNTRIES</span><span class="p">)</span> <span class="ow">or</span> <span class="n">COUNTRIES</span><span class="p">[</span><span class="n">cindex</span><span class="p">]</span> <span class="o">!=</span> <span class="n">country</span><span class="p">:</span> 
+        <span class="n">cindex</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>                                             
+    <span class="c"># 因为 Redis 里面的未初始化数据在返回时会被转换为空值，</span>
+    <span class="c"># 所以我们要将“未找到指定国家”时的返回值改为 0 ，</span>
+    <span class="c"># 并将第一个国家的索引变为 1 ，以此类推。</span>
+    <span class="n">cindex</span> <span class="o">+=</span> <span class="mi">1</span>                                                 
+
+    <span class="n">sindex</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="k">if</span> <span class="n">state</span> <span class="ow">and</span> <span class="n">country</span> <span class="ow">in</span> <span class="n">STATES</span><span class="p">:</span>
+        <span class="c"># 尝试取出国家对应的州信息。</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="n">STATES</span><span class="p">[</span><span class="n">country</span><span class="p">]</span>                               
+        <span class="c"># 寻找州对应的偏移量。</span>
+        <span class="n">sindex</span> <span class="o">=</span> <span class="n">bisect</span><span class="o">.</span><span class="n">bisect_left</span><span class="p">(</span><span class="n">states</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>             
+        <span class="c"># 像处理“未找到指定国家”时的情况一样，处理“未找到指定州”的情况。</span>
+        <span class="k">if</span> <span class="n">sindex</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">)</span> <span class="ow">or</span> <span class="n">states</span><span class="p">[</span><span class="n">sindex</span><span class="p">]</span> <span class="o">!=</span> <span class="n">state</span><span class="p">:</span>     
+            <span class="n">sindex</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>                                        
+    <span class="c"># 如果没有找到指定的州，那么索引为 0 ；</span>
+    <span class="c"># 如果找到了指定的州，那么索引大于 0 。</span>
+    <span class="n">sindex</span> <span class="o">+=</span> <span class="mi">1</span>                                                
+
+    <span class="c"># chr() 函数会将介于 0 至 255 之间的整数值转换为对应的 ASCII 字符。</span>
+    <span class="k">return</span> <span class="nb">chr</span><span class="p">(</span><span class="n">cindex</span><span class="p">)</span> <span class="o">+</span> <span class="nb">chr</span><span class="p">(</span><span class="n">sindex</span><span class="p">)</span>                            
+<span class="c"># &lt;end id=&quot;location-to-code&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-15</span>
+<span class="c"># &lt;start id=&quot;set-location-information&quot;/&gt;</span>
+<span class="c"># 设置每个分片的大小。</span>
+<span class="n">USERS_PER_SHARD</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">20</span>                                   
+
+<span class="k">def</span> <span class="nf">set_location</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user_id</span><span class="p">,</span> <span class="n">country</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+    <span class="c"># 取得用户所在位置的编码。</span>
+    <span class="n">code</span> <span class="o">=</span> <span class="n">get_code</span><span class="p">(</span><span class="n">country</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>                        
+    
+    <span class="c"># 查找分片 ID 以及用户在指定分片中的位置（position）。</span>
+    <span class="n">shard_id</span><span class="p">,</span> <span class="n">position</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">user_id</span><span class="p">,</span> <span class="n">USERS_PER_SHARD</span><span class="p">)</span>   
+    <span class="c"># 计算用户数据的偏移量。</span>
+    <span class="n">offset</span> <span class="o">=</span> <span class="n">position</span> <span class="o">*</span> <span class="mi">2</span>                                  
+
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>
+    <span class="c"># 将用户的位置信息储存到分片后的位置表格里面。</span>
+    <span class="n">pipe</span><span class="o">.</span><span class="n">setrange</span><span class="p">(</span><span class="s">&#39;location:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">shard_id</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>     
+
+    <span class="c"># 对记录目前已知最大用户 ID 的有序集合进行更新。</span>
+    <span class="n">tkey</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>                                
+    <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="n">tkey</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="p">)</span>                         
+    <span class="n">pipe</span><span class="o">.</span><span class="n">zunionstore</span><span class="p">(</span><span class="s">&#39;location:max&#39;</span><span class="p">,</span>                        
+        <span class="p">[</span><span class="n">tkey</span><span class="p">,</span> <span class="s">&#39;location:max&#39;</span><span class="p">],</span> <span class="n">aggregate</span><span class="o">=</span><span class="s">&#39;max&#39;</span><span class="p">)</span>            
+    <span class="n">pipe</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">tkey</span><span class="p">)</span>                                       
+
+    <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
+<span class="c"># &lt;end id=&quot;set-location-information&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-16</span>
+<span class="c"># &lt;start id=&quot;aggregate-population&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">aggregate_location</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
+    <span class="c"># 初始化两个特殊结构，</span>
+    <span class="c"># 以便快速地对已存在的计数器以及缺失的计数器进行更新。</span>
+    <span class="n">countries</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>                                
+    <span class="n">states</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">))</span>               
+
+    <span class="c"># 获取目前已知的最大用户 ID ，</span>
+    <span class="c"># 并使用它来计算出程序需要访问的最大分片 ID 。</span>
+    <span class="n">max_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;location:max&#39;</span><span class="p">,</span> <span class="s">&#39;max&#39;</span><span class="p">))</span>            
+    <span class="n">max_block</span> <span class="o">=</span> <span class="n">max_id</span> <span class="o">//</span> <span class="n">USERS_PER_SHARD</span>                       
+
+    <span class="c"># 按顺序地处理每个分片……</span>
+    <span class="k">for</span> <span class="n">shard_id</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">max_block</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>                      
+        <span class="c"># 读取每个块……</span>
+        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">readblocks</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;location:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">shard_id</span><span class="p">):</span>  
+            <span class="c"># 从块里面提取出每个编码，</span>
+            <span class="c"># 并根据编码查找原始的位置信息，</span>
+            <span class="c"># 然后对这些位置信息进行聚合计算。</span>
+            <span class="k">for</span> <span class="n">offset</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">block</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>           
+                <span class="n">code</span> <span class="o">=</span> <span class="n">block</span><span class="p">[</span><span class="n">offset</span><span class="p">:</span><span class="n">offset</span><span class="o">+</span><span class="mi">2</span><span class="p">]</span>
+                <span class="c"># 对聚合数据进行更新。</span>
+                <span class="n">update_aggregates</span><span class="p">(</span><span class="n">countries</span><span class="p">,</span> <span class="n">states</span><span class="p">,</span> <span class="p">[</span><span class="n">code</span><span class="p">])</span>    
+
+    <span class="k">return</span> <span class="n">countries</span><span class="p">,</span> <span class="n">states</span>
+<span class="c"># &lt;end id=&quot;aggregate-population&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-17</span>
+<span class="c"># &lt;start id=&quot;code-to-location&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">update_aggregates</span><span class="p">(</span><span class="n">countries</span><span class="p">,</span> <span class="n">states</span><span class="p">,</span> <span class="n">codes</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">codes</span><span class="p">:</span>
+        <span class="c"># 只对合法的编码进行查找。</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">code</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>                             
+            <span class="k">continue</span>                                   
+
+        <span class="c"># 计算出国家和州在查找表格中的实际偏移量。</span>
+        <span class="n">country</span> <span class="o">=</span> <span class="nb">ord</span><span class="p">(</span><span class="n">code</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">-</span> <span class="mi">1</span>                     
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">ord</span><span class="p">(</span><span class="n">code</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="mi">1</span>                      
+        
+        <span class="c"># 如果国家所处的偏移量不在合法范围之内，那么跳过这个编码。</span>
+        <span class="k">if</span> <span class="n">country</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">country</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">COUNTRIES</span><span class="p">):</span>    
+            <span class="k">continue</span>                                   
+
+        <span class="c"># 获取 ISO3 国家编码。</span>
+        <span class="n">country</span> <span class="o">=</span> <span class="n">COUNTRIES</span><span class="p">[</span><span class="n">country</span><span class="p">]</span>                   
+        <span class="c"># 在对国家信息进行解码之后，</span>
+        <span class="c"># 把用户计入到这个国家对应的计数器里面。</span>
+        <span class="n">countries</span><span class="p">[</span><span class="n">country</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>                         
+
+        <span class="c"># 如果程序没有找到指定的州信息，</span>
+        <span class="c"># 或者查找州信息时的偏移量不在合法的范围之内，</span>
+        <span class="c"># 那么跳过这个编码。</span>
+        <span class="k">if</span> <span class="n">country</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">STATES</span><span class="p">:</span>                       
+            <span class="k">continue</span>                                    
+        <span class="k">if</span> <span class="n">state</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">state</span> <span class="o">&gt;=</span> <span class="n">STATES</span><span class="p">[</span><span class="n">country</span><span class="p">]:</span>       
+            <span class="k">continue</span>                                    
+
+        <span class="c"># 根据编码获取州名。</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">STATES</span><span class="p">[</span><span class="n">country</span><span class="p">][</span><span class="n">state</span><span class="p">]</span>                  
+        <span class="c"># 对州计数器执行加一操作。</span>
+        <span class="n">states</span><span class="p">[</span><span class="n">country</span><span class="p">][</span><span class="n">state</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>                     
+<span class="c"># &lt;end id=&quot;code-to-location&quot;/&gt;</span>
+
+
+<span class="c"># 代码清单 9-18</span>
+<span class="c"># &lt;start id=&quot;aggregate-limited&quot;/&gt;</span>
+<span class="k">def</span> <span class="nf">aggregate_location_list</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user_ids</span><span class="p">):</span>
+    <span class="c"># 设置流水线，减少操作执行过程中与 Redis 的通信往返次数。</span>
+    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>                                
+    <span class="c">#  和之前一样，设置好基本的聚合数据。</span>
+    <span class="n">countries</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>                               
+    <span class="n">states</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">))</span>             
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">user_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">user_ids</span><span class="p">):</span>
+        <span class="c"># 查找用户位置信息所在分片的 ID ，以及信息在分片中的偏移量。</span>
+        <span class="n">shard_id</span><span class="p">,</span> <span class="n">position</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">user_id</span><span class="p">,</span> <span class="n">USERS_PER_SHARD</span><span class="p">)</span>   
+        <span class="n">offset</span> <span class="o">=</span> <span class="n">position</span> <span class="o">*</span> <span class="mi">2</span>                                   
+
+        <span class="c"># 发送另一个被流水线包裹的命令，获取用户的位置信息。</span>
+        <span class="n">pipe</span><span class="o">.</span><span class="n">substr</span><span class="p">(</span><span class="s">&#39;location:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">shard_id</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">offset</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>   
+
+        <span class="c"># 每处理 1000 个请求，</span>
+        <span class="c"># 程序就会调用之前定义的辅助函数对聚合数据进行一次更新。</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">1000</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>                                   
+            <span class="n">update_aggregates</span><span class="p">(</span><span class="n">countries</span><span class="p">,</span> <span class="n">states</span><span class="p">,</span> <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">())</span>
+
+    <span class="c"># 对遍历余下的最后一批用户进行处理。</span>
+    <span class="n">update_aggregates</span><span class="p">(</span><span class="n">countries</span><span class="p">,</span> <span class="n">states</span><span class="p">,</span> <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">())</span>        
+
+    <span class="c"># 返回聚合数据。</span>
+    <span class="k">return</span> <span class="n">countries</span><span class="p">,</span> <span class="n">states</span>                                   
+<span class="c"># &lt;end id=&quot;aggregate-limited&quot;/&gt;</span>
+
+<span class="k">class</span> <span class="nc">TestCh09</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">tearDown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">test_long_ziplist_performance</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">long_ziplist_performance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">llen</span><span class="p">(</span><span class="s">&#39;test&#39;</span><span class="p">),</span> <span class="mi">5</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_shard_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">base</span> <span class="o">=</span> <span class="s">&#39;test&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="s">&#39;test:0&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="s">&#39;1&#39;</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="s">&#39;test:0&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="mi">125</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span> <span class="s">&#39;test:1&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="s">&#39;125&#39;</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span> <span class="s">&#39;test:1&#39;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">50</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="s">&#39;hello:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">i</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mi">20</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="nb">int</span><span class="p">(</span><span class="n">shard_key</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_sharded_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">50</span><span class="p">):</span>
+            <span class="n">shard_hset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;keyname:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">shard_hget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test&#39;</span><span class="p">,</span> <span class="s">&#39;keyname:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="n">i</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+            <span class="n">shard_hset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">shard_hget</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;test2&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">test_sharded_sadd</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">50</span><span class="p">):</span>
+            <span class="n">shard_sadd</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;testx&#39;</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">scard</span><span class="p">(</span><span class="s">&#39;testx:0&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">scard</span><span class="p">(</span><span class="s">&#39;testx:1&#39;</span><span class="p">),</span> <span class="mi">50</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_unique_visitors</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">global</span> <span class="n">DAILY_EXPECTED</span>
+        <span class="n">DAILY_EXPECTED</span> <span class="o">=</span> <span class="mi">10000</span>
+        
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">179</span><span class="p">):</span>
+            <span class="n">count_visit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;unique:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">())),</span> <span class="s">&#39;179&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s">&#39;unique:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">((</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span> <span class="o">-</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()),</span> <span class="mi">1000</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">183</span><span class="p">):</span>
+            <span class="n">count_visit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;unique:</span><span class="si">%s</span><span class="s">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">())),</span> <span class="s">&#39;183&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">test_user_location</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">country</span> <span class="ow">in</span> <span class="n">COUNTRIES</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">country</span> <span class="ow">in</span> <span class="n">STATES</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">STATES</span><span class="p">[</span><span class="n">country</span><span class="p">]:</span>
+                    <span class="n">set_location</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">country</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+                    <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">set_location</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">country</span><span class="p">,</span> <span class="s">&#39;&#39;</span><span class="p">)</span>
+                <span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+        
+        <span class="n">_countries</span><span class="p">,</span> <span class="n">_states</span> <span class="o">=</span> <span class="n">aggregate_location</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">)</span>
+        <span class="n">countries</span><span class="p">,</span> <span class="n">states</span> <span class="o">=</span> <span class="n">aggregate_location_list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">_countries</span><span class="p">,</span> <span class="n">countries</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">_states</span><span class="p">,</span> <span class="n">states</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">countries</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">STATES</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">STATES</span><span class="p">[</span><span class="n">c</span><span class="p">]),</span> <span class="n">countries</span><span class="p">[</span><span class="n">c</span><span class="p">])</span>
+                <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">STATES</span><span class="p">[</span><span class="n">c</span><span class="p">]:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">states</span><span class="p">[</span><span class="n">c</span><span class="p">][</span><span class="n">s</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">countries</span><span class="p">[</span><span class="n">c</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="chapter10.html" title="第 10 章相关源代码"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="chapter8.html" title="第 8 章相关源代码"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

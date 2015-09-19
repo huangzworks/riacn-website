@@ -1,0 +1,122 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>序言 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="../index.html" />
+    <link rel="next" title="前言" href="preface.html" />
+    <link rel="prev" title="译者序" href="translator-foreword.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="preface.html" title="前言"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="translator-foreword.html" title="译者序"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>序言<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>Redis是我在大约3年前为了解决一个实际问题而创造出来的：简单来说，当时我在尝试做一件使用磁盘存储关系数据库（on-disk SQL database）无法完成的事情——在一台我能够支付得起的小虚拟机上面处理大量写入负载。</p>
+<p>我要解决的问题在概念上并不复杂：多个网站会通过一个小型的JavaScript追踪器（tracker）连续不断地向我的服务器发送页面访问记录（page view），而我的服务器需要为每个网站保存一定数量的最新页面访问记录，并通过网页将这些记录实时地展示给用户观看。</p>
+<p>在最大负载达到每秒数千条页面记录的情况下，无论我使用什么样的数据库模式，无论我如何进行优化，我所使用的关系数据库都没办法在这个小虚拟机上处理如此大的负载。因为囊中羞涩，我没办法对虚拟机进行升级，并且我觉得应该有更简单的方法来处理一个由推入值组成的列表。最终，我决定自己写一个实验性质的内存数据库原型（prototype），这个数据库使用列表作为基本数据类型，并且支持对列表的两端执行常数时间复杂度的弹出（pop）和推入（push）操作。长话短说吧，这个内存数据库的想法的确奏效了，于是我用C语言重写了最初的数据库原型，并给它加上了基于子进程实现的持久化特性，Redis就这样诞生了。</p>
+<p>在数年之后的今天，Redis这个项目已经发生了显著的变化：我们现在拥有了一个更为健壮的系统，并且随着Redis 2.6的发布，开发的重点已经转移到实现集群以及高可用特性上面，Redis正在进入它的成熟期。在我看来，Redis生态系统中进步最为明显的一个地方，就是redis.io网站以及Redis Google Group这些由用户和贡献者组成的社区。数以千计的人通过GitHub的问题反馈系统参与到了这个项目里面，他们为Redis编写客户端库、提交补丁并帮助其他遇到麻烦的用户。</p>
+<p>时至今日，Redis仍然是一个BSD授权的社区项目，它没有那些需要付钱才能使用的闭源插件或者功能增强版。Redis的参考文档非常详细和准确，在遇到问题时也很容易就可以找到Redis开发者或者专家来为你排忧解难。</p>
+<p>Redis始于实用主义——它是一个程序员因为找不到合适的工具来解决手头上的问题而发明的，这是我认为理论性书籍无法很好地介绍Redis的原因，这也是我喜欢《Redis实战》（Redis in Action）的原因：这本书是为那些想要解决问题的人而写的，它没有乏味地介绍API，而是通过一些引人入胜的例子深入地探究了Redis的各项特性以及数据类型。</p>
+<p>值得一提的是，《Redis实战》同样来源于Redis社区：本书的作者Josiah在出版这本书之前，已经在很多不同的方面帮助了数以百计的Redis用户——从模式设计到硬件延迟问题，他的建议和贡献布满了整个Redis Group。</p>
+<p>本书另一个非常好的地方在于它介绍了服务器运维方面的主题：实际上大部分人在开发应用程序的同时也需要自己部署服务器，而理解服务器运维操作、了解正在使用的硬件和服务器软件的基本限制，有助于写出最大限度地利用硬件和服务器软件的应用程序。</p>
+<p>综上所述，《Redis实战》将是一本把读者带入Redis世界、向读者指明正确方向从而避免常见陷阱的书。我认为《Redis实战》对于Redis的生态系统非常有帮助，Redis的用户应该都会喜欢这本书。</p>
+<p>——Redis之父，Salvatore Sanfilippo</p>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="preface.html" title="前言"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="translator-foreword.html" title="译者序"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>

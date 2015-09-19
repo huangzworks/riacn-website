@@ -1,0 +1,343 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>附录A 快速安装指南 &mdash; Redis 实战</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Redis 实战" href="../index.html" />
+    <link rel="next" title="附录B 其他资源和参考资料" href="appendx-b.html" />
+    <link rel="prev" title="第3章 Redis命令" href="chapter3.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="appendx-b.html" title="附录B 其他资源和参考资料"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="chapter3.html" title="第3章 Redis命令"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="a">
+<h1>附录A 快速安装指南<a class="headerlink" href="#a" title="Permalink to this headline">¶</a></h1>
+<p>因为在不同平台上面安装Redis的难度和步骤都各不相同，所以这个附录用三节分别介绍了在三种常见的平台上面安装Redis的方法，并说明了安装并配置Python以及Python上面的Redis客户端库的方法，读者可以根据自己使用的平台来决定阅读哪一节。</p>
+<div class="section" id="a-1-debian-linuxubuntu-linuxredis">
+<h2>A.1  在Debian Linux或者Ubuntu Linux上面安装Redis的方法<a class="headerlink" href="#a-1-debian-linuxubuntu-linuxredis" title="Permalink to this headline">¶</a></h2>
+<p>如果读者使用的是Debian衍生的Linux系统，那么第一个想法可能就是使用<code class="docutils literal"><span class="pre">apt-get</span> <span class="pre">install</span> <span class="pre">redis-server</span></code>命令来安装Redis，但这种安装方法并不值得推荐，因为根据Debian或者Ubuntu版本的不同，这种安装方法有可能会让读者安装到旧版的Redis。举个例子，在Ubuntu 10.4上面执行<code class="docutils literal"><span class="pre">apt-get</span> <span class="pre">install</span> <span class="pre">redis-server</span></code>命令，只会将2010年3月份发布的Redis 1.2.6安装到系统上面，而本书介绍的很多命令都不能在这个旧版本里面执行。</p>
+<p>为了避免这一问题，我们需要直接使用源码来编译并安装Redis。本节首先介绍如何安装编译Redis所需的工具，然后再介绍下载、编译和安装Redis的方法。在成功运行Redis之后，本节会说明如何下载Python语言的Redis客户端库。</p>
+<p>首先，执行代码清单A-1展示的命令，获取并安装<code class="docutils literal"><span class="pre">make</span></code>等一系列构建工具。</p>
+<hr class="docutils" />
+<p>代码清单A-1  在Debian Linux上面安装构建工具</p>
+<div class="highlight-python"><div class="highlight"><pre>~$ sudo apt-get update
+~$ sudo apt-get install make gcc python-dev
+</pre></div>
+</div>
+<hr class="docutils" />
+<p>如果读者的系统已经安装了所需的构建工具，那么上述命令会提示读者相应的工具已经安装过了。在构建工具安装完毕之后，读者需要执行以下操作：</p>
+<ol class="arabic simple">
+<li>从<a class="reference external" href="http://redis.io/download">http://redis.io/download</a>下载最新的稳定的Redis源码。</li>
+<li>解压源码，编译、安装并启动Redis。</li>
+<li>下载并安装Python语言的Redis客户端库。</li>
+</ol>
+<p>代码清单A-2展示了前两个操作的执行过程。</p>
+<hr class="docutils" />
+<p>代码清单A-2  在Linux系统上安装Redis</p>
+<div class="highlight-python"><div class="highlight"><pre>~:$ wget -q http://redis.googlecode.com/files/redis-2.6.2.tar.gz    # 从http://redis.io/download下载最新版的Redis。本书写作时Redis的最新版为2.6版本。
+~:$ tar -xzf redis-2.6.2.tar.gz                                     # 解压源码。
+~:$ cd redis-2.6.2/
+~/redis-2.6.2:$ make                                                # 编译Redis。
+cd src &amp;&amp; make all                                                  # 注意观察编译消息，
+[trimmed]                                                           # 这里不应该看到错误。
+make[1]: Leaving directory `~/redis-2.6.2/src&#39;                      #
+~/redis-2.6.2:$ sudo make install                                   # 安装Redis。
+cd src &amp;&amp; make install                                              # 注意观察安装消息，
+[trimmed]                                                           # 这里不应该看到错误。
+make[1]: Leaving directory `~/redis-2.6.2/src&#39;                      #
+~/redis-2.6.2:$ redis-server redis.conf                             # 启动Redis服务器。
+[13792] 26 Aug 17:53:16.523 * Max number of open files set to 10032 # 通过日志确认Redis已经顺利启动。
+[trimmed]                                                           #
+[13792] 26 Aug 17:53:16.529 * The server is now ready to accept     #
+connections on port 6379                                            #
+</pre></div>
+</div>
+<hr class="docutils" />
+<p>在安装并运行Redis之后，读者需要为Python语言安装Redis客户端库。因为最近几年释发布的Ubuntu和Debian都预装了Python 2.6或者2.7，所以读者并不需要花时间去安装Python，不过为了更方便地下载和安装Redis客户端库，读者需要下载并安装一个名为<code class="docutils literal"><span class="pre">setuptools</span></code>的简单辅助包（simple helper package）<a class="footnote-reference" href="#f1" id="id1">[1]</a>。代码清单A-3展示了为Python语言安装Redis客户端库的整个过程。</p>
+<hr class="docutils" />
+<p>代码清单A-3  在Linux上为Python语言安装Redis客户端库</p>
+<div class="highlight-python"><div class="highlight"><pre>~:$ wget -q http://peak.telecommunity.com/dist/ez_setup.py          # 下载ez_setup模块
+~:$ sudo python ez_setup.py                                         # 通过运行ez_setup模块来下载并安装 setuptools。
+Downloading http://pypi.python.org/packages/2.7/s/setuptools/...    #
+[trimmed]                                                           #
+Finished processing dependencies for setuptools==0.6c11             #
+~:$ sudo python -m easy_install redis hiredis                       # 通过运行setuptools的easy_install包来安装redis包以及hiredis包。
+Searching for redis                                                 # redis包为Python提供了一个连接至Redis的接口。
+[trimmed]                                                           #
+Finished processing dependencies for redis                          #
+Searching for hiredis                                               # hiredis包是一个C库，它可以提高Python的Redis客户端的速度。
+[trimmed]                                                           #
+Finished processing dependencies for hiredis                        #
+~:$
+</pre></div>
+</div>
+<hr class="docutils" />
+<p>在成功地安装Python的Redis客户端库之后，请跳到本章的A.4节，按照该节介绍的步骤在Python里面对Redis进行测试，为之后在其他章节里面使用Redis做好准备。</p>
+</div>
+<div class="section" id="a-2-os-xredis">
+<h2>A.2  在OS X上面安装Redis的方法<a class="headerlink" href="#a-2-os-xredis" title="Permalink to this headline">¶</a></h2>
+<p>之前提到过，不同平台下载和安装Redis以及Python的Redis客户端库的方法也各不相同。这一节将讨论：</p>
+<ol class="arabic simple">
+<li>在OS X系统上下载、安装和运行Redis。</li>
+<li>为Python安装Redis客户端库。</li>
+</ol>
+<p>在上一节，我们推荐使用Linux系统的读者通过安装构建工具并编译源码的方式来获得可运行的Redis服务器程序。但是在OS X系统上面，Xcode的安装步骤比较复杂，而且Xcode的体积比起Linux上面的构建工具的体积要大10多倍，光是下载Xcode就要花不少时间。因此，本节将介绍不需要用到编译器的Redis安装方法。</p>
+<p>为了在不使用编译器的情况下，把Redis安装到OS X上面，我们需要用到一个名为<em>Rudix</em>的工具，这个工具可以直接以预编译二进制的形式安装各式各样的软件。</p>
+<p>为了下载并安装Rudix和Redis，请在OS X的应用程序工具栏里面找到终端程序，然后运行终端并按照代码清单A-4展示的步骤执行Rudix和Redis的安装操作。</p>
+<hr class="docutils" />
+<p>代码清单A-4  在OS X系统上安装Redis</p>
+<div class="highlight-python"><div class="highlight"><pre>~:$ curl -O http://rudix.googlecode.com/hg/Ports/rudix/rudix.py         # 下载用于安装Rudix的引导脚本。
+[trimmed]
+~:$ sudo python rudix.py install rudix                                  # 命令Rudix安装自身。
+Downloading rudix.googlecode.com/files/rudix-12.6-0.pkg                 # Rudix下载并安装它自身。
+[trimmed]                                                               #
+installer: The install was successful.                                  #
+All done                                                                #
+~:$ sudo rudix install redis                                            # 命令Rudix安装Redis。
+Downloading rudix.googlecode.com/files/redis-2.4.15-0.pkg               # Rudix下载并安装它自身。
+[trimmed]                                                               #
+installer: The install was successful.                                  #
+All done                                                                #
+~:$ redis-server                                                        # 启动Redis服务器。
+[699] 13 Jul 21:18:09 # Warning: no config file specified, using the    # Redis使用默认配置启动并运行。
+default config. In order to specify a config file use &#39;redis-server     #
+/path/to/redis.conf&#39;                                                    #
+[699] 13 Jul 21:18:09 * Server started, Redis version 2.4.15            #
+[699] 13 Jul 21:18:09 * The server is now ready to accept connections   #
+on port 6379                                                            #
+[699] 13 Jul 21:18:09 - 0 clients connected (0 slaves), 922304 bytes    #
+in use                                                                  #
+</pre></div>
+</div>
+<hr class="docutils" />
+<p>在成功安装Redis之后，接下来就该为Python安装Redis客户端库了。因为10.6和10.7版本的OS X都预装了Python 2.6或者Python 2.7，所以我们无需自己去安装Python。因为Redis正在终端的其中一个标签里面运行，所以读者需要按下command + T组合键，创建一个新的标签，然后按照代码清单A-5展示的步骤，在新标签里面执行安装Redis客户端库的操作。</p>
+<hr class="docutils" />
+<p>代码清单A-5  在OS X系统上为Python安装Redis客户端库</p>
+<div class="highlight-python"><div class="highlight"><pre>~:$ sudo rudix install pip                              # 通过Rudix安装名为pip的Python包管理器。
+Downloading rudix.googlecode.com/files/pip-1.1-1.pkg    # Rudix正在安装pip。
+[trimmed]                                               #
+installer: The install was successful.                  #
+All done                                                #
+~:$ sudo pip install redis                              # 现在可以使用pip来为Python安装Redis客户端库了。
+Downloading/unpacking redis                             # Pip正在为Python安装Redis客户端库。
+[trimmed]                                               #
+Cleaning up...                                          #
+~:$
+</pre></div>
+</div>
+<hr class="docutils" />
+<p>如果读者把这个附录介绍的在Linux和Windows上面安装Redis的方法也看了的话，就会发现另外两节都是使用<code class="docutils literal"><span class="pre">setuptools</span></code>的<code class="docutils literal"><span class="pre">easy_install</span></code>方法来安装Redis客户端库的，只有本节使用的是<code class="docutils literal"><span class="pre">pip</span></code>。这是因为Rudix提供了<code class="docutils literal"><span class="pre">pip</span></code>的安装包而没有提供<code class="docutils literal"><span class="pre">setuptools</span></code>的安装包，因此首先安装<code class="docutils literal"><span class="pre">pip</span></code>，然后使用<code class="docutils literal"><span class="pre">pip</span></code>来为Python安装Redis客户端库，要比手动下载并安装<code class="docutils literal"><span class="pre">setuptools</span></code>简单得多。</p>
+<p>另外，如果读者把这个附录介绍的在Linux上面安装Redis的方法也看了的话，就会发现在Linux上面安装Redis客户端的时候，我们把<code class="docutils literal"><span class="pre">hiredis</span></code>这个辅助库也安装上了，但是在OS X上面我们却没有这么做。这么做的原因和之前没有使用编译方法来安装Redis的原因一样——因为不确定读者是否已经安装了Xcode，所以我们只能基于已有的软件来执行安装操作。</p>
+<p>现在读者已经成功地为Python安装了Redis客户端库，接下来可以跳到A.4节，学习如何在Python里面操作Redis了。</p>
+</div>
+<div class="section" id="a-3-windowsredis">
+<h2>A.3  在Windows上安装Redis的方法<a class="headerlink" href="#a-3-windowsredis" title="Permalink to this headline">¶</a></h2>
+<p>在学习如何在Windows上面安装Redis之前，读者需要知道，因为种种原因，在Windows上面运行Redis并不值得推荐。本节将介绍以下内容：</p>
+<ul class="simple">
+<li>不推荐在Windows上面运行Redis的原因。</li>
+<li>如何下载、安装并运行预编译的Windows二进制程序。</li>
+<li>如何Windows系统上下载并安装Python。</li>
+<li>如何安装Redis客户端库。</li>
+</ul>
+<p>首先来解释一下，为什么读者不应该在Windows系统上运行Redis。</p>
+<div class="section" id="a-3-1-windowsredis">
+<h3>A.3.1  在Windows系统上运行Redis的弊端<a class="headerlink" href="#a-3-1-windowsredis" title="Permalink to this headline">¶</a></h3>
+<p>Redis在将数据库持久化到磁盘的时候，需要用到<code class="docutils literal"><span class="pre">fork</span></code>系统调用，而Windows并不支持这个调用。在缺少<code class="docutils literal"><span class="pre">fork</span></code>调用的情况下，Redis在执行持久化操作期间就只能够阻塞所有客户端，直到持久化操作执行完毕为止。</p>
+<p>微软的一些工程师最近花了不少时间来解决Windows版的Redis无法进行后台保存操作的问题，并决定使用线程代替<code class="docutils literal"><span class="pre">fork</span></code>产生的子进程来对磁盘执行写操作。在写这篇文章的时候，微软开发了Redis 2.6的一个alpha分支，但是这个分支只提供了源码而没有提供预编译二进制文件，并且微软不保证它能否用于生产环境。</p>
+<p>在最近一段时间，由Dusan Majkic创建的非官方移植版Redis提供了Redis 2.4.5的预编译二进制文件，但这个版本也会在执行持久化操作时阻塞客户端。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>在Windows上面自行编译Redis</p>
+<p class="last">如果读者需要在Windows上面使用最新版本的Redis，那么只能够自己来编译Redis了。编译Redis的最好选择是使用微软官方的移植版本（<a class="reference external" href="https://github.com/MSOpenTech/redis/">https://github.com/MSOpenTech/redis/</a>），而编译这个版本需要用到微软的Visual Studio，或者免费的Visual Studio Express 2010。如果读者决定自己编译Redis的话，那么请注意，除了开发和测试之外，微软对这个移植版Redis的健壮性不做任何保证。</p>
+</div>
+<p>在了解了Windows版本的Redis的现状之后，如果读者还是想要在Windows上面安装Redis的话，那么就请看接下来介绍的安装方法吧。</p>
+</div>
+<div class="section" id="a-3-2-windowsredis">
+<h3>A.3.2  在Windows上安装Redis<a class="headerlink" href="#a-3-2-windowsredis" title="Permalink to this headline">¶</a></h3>
+<p>首先，访问Dusan Majkic的GitHub页面<a class="reference external" href="https://github.com/dmajkic/redis/downloads">https://github.com/dmajkic/redis/downloads</a>，根据你正在使用的Windows版本，下载适用于32位系统或者64位系统的预编译Redis。</p>
+<p>在下载完成之后，从下载所得的zip文件里面解压出可执行的文件。因为Windows XP或以上版本的Windows都预装了解压zip文件所需的软件，所以如果你使用的是Windows XP或者以上版本的Windows系统，那么就可以在不安装其他软件的情况下，解压下载所得的zip文件。在将32位或者64位的Redis解压到指定的位置之后，通过双击<code class="docutils literal"><span class="pre">redis-server</span></code>这个可执行文件来启动Redis服务器（记住，64位的Windows可以执行32位或者64位的Redis，但是32位的Windows只能执行32位的Redis）。在Redis启动之后，你应该会看到类似图A-1所展示的窗口。</p>
+<hr class="docutils" />
+<img alt="../_images/A-1.png" src="../_images/A-1.png" />
+<p>图A-1  在Windows上运行Redis</p>
+<hr class="docutils" />
+<p>在成功地运行Redis之后，接下来要做的就是安装Python了。</p>
+</div>
+<div class="section" id="a-3-3-windowspython">
+<h3>A.3.3  在Windows上安装Python<a class="headerlink" href="#a-3-3-windowspython" title="Permalink to this headline">¶</a></h3>
+<p>如果你还没有在系统上安装Python 2.6或者Python 2.7，那么你最好下载Python 2.7的最新版本，因为这是Redis客户端支持的最新版Python。首先访问<a class="reference external" href="http://www.python.org/download/">http://www.python.org/download/</a>，选择Windows可用的2.7系列的最新版本，然后根据你的系统下载32位或者64位的版本。下载完成之后，通过双击下载所得的.msi文件来进行安装。</p>
+<p>在默认情况下，Python 2.7将被安装到C:Python27下。接下来要做的就是为Python安装Redis客户端库。注意：如果你使用的是Python 2.6，那么每次书本引用位置<em>Python27</em>的时候，你都需要将<em>Python27</em>替换成<em>Python26</em>。</p>
+<p>为了安装Redis客户端库，我们首先需要通过命令行来安装<code class="docutils literal"><span class="pre">setuptools</span></code>包，然后再通过<code class="docutils literal"><span class="pre">setuptools</span></code>包安装<code class="docutils literal"><span class="pre">easy_install</span></code>工具。首先，单击Windows菜单栏上的“开始”按钮，在“附件”程序组里面找到“命令提示符”，然后单击并打开命令提示符程序。在打开命令提示符程序之后，按照代码清单A-6展示的操作，依次下载并安装<code class="docutils literal"><span class="pre">setuptools</span></code>和Redis客户端库。</p>
+<hr class="docutils" />
+<p>代码清单A-6  在Windows上为Python安装Redis客户端库</p>
+<div class="highlight-python"><div class="highlight"><pre>C:\Users\josiah&gt;c:\python27\python                                      # 以交互模式启动Python。
+Python 2.7.3 (default, Apr 10 2012, 23:31:26) [MSC v.1500 32 bit...
+Type &quot;help&quot;, &quot;copyright&quot;, &quot;credits&quot; or &quot;license&quot; for more information.
+&gt;&gt;&gt; from urllib import urlopen                                          # 从urllib模块里面载入urlopen工厂函数。
+&gt;&gt;&gt; data = urlopen(&#39;http://peak.telecommunity.com/dist/ez_setup.py&#39;)    # 获取一个能够帮助你安装其他包的模块。
+&gt;&gt;&gt; open(&#39;ez_setup.py&#39;, &#39;wb&#39;).write(data.read())                        # 将下载后的模块写入磁盘文件里。
+&gt;&gt;&gt; exit()                                                              # 通过执行内置的exit()函数来退出Python解释器。
+
+C:\Users\josiah&gt;c:\python27\python ez_setup.py                          # 运行ez_setup辅助模块。
+Downloading http://pypi.python.org/packages/2.7/s/setuptools/...        # ez_setup辅助模块会下载并安装setuptools，
+[trimmed]                                                               # 而setuptools可以方便地下载并安装Redis客户端库。
+Finished processing dependencies for setuptools==0.6c11                 #
+
+C:\Users\josiah&gt;c:\python27\python -m easy_install redis                # 使用setuptools的easy_install模块来下载并安装Redis。
+Searching for redis                                                     #
+[trimmed]                                                               #
+Finished processing dependencies for redis                              #
+C:\Users\josiah&gt;
+</pre></div>
+</div>
+<hr class="docutils" />
+<p>现在你已经成功地安装了Python以及Redis客户端库了，请接着阅读下面的A.4节，学习如何在Python里面使用Redis。</p>
+</div>
+</div>
+<div class="section" id="a-4-redis">
+<h2>A.4  你好Redis<a class="headerlink" href="#a-4-redis" title="Permalink to this headline">¶</a></h2>
+<p>在安装了Redis之后，读者还需要确保Python有合适的库可以访问Redis。如果你是遵照之前说明的步骤来执行安装操作的话，那么你现在应该还打开着一个命令提示符窗口（如果你已经关闭了那个窗口的话，那么请重新打开一个），请在这个命令提示符窗口运行Python，并按照代码清单A-7展示的步骤，在Python控制台里面尝试连接Redis并发送几个命令。</p>
+<hr class="docutils" />
+<p>代码清单A-7  使用Python来测试Redis</p>
+<div class="highlight-python"><div class="highlight"><pre>~:$ python                                          # 启动Python，并使用它来验证Redis的各项功能是否正常。
+Python 2.6.5 (r265:79063, Apr 16 2010, 13:09:56)
+[GCC 4.4.3] on linux2
+Type &quot;help&quot;, &quot;copyright&quot;, &quot;credits&quot; or &quot;license&quot; for more information.
+&gt;&gt;&gt; import redis                                    # 导入Redis客户端库，如果系统已经安装了hiredis这个C加速库的话，那么Redis客户端库会自动使用hiredis。
+&gt;&gt;&gt; conn = redis.Redis()                            # 创建一个指向Redis的连接。
+&gt;&gt;&gt; conn.set(&#39;hello&#39;, &#39;world&#39;)                      # 设置一个值，
+True                                                # 并通过返回值确认设置操作是否执行成功。
+&gt;&gt;&gt; conn.get(&#39;hello&#39;)                               # 获取刚刚设置的值。
+&#39;world&#39;                                             #
+</pre></div>
+</div>
+<hr class="docutils" />
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>以其他方式运行Python</p>
+<p class="last">除了在终端里面运行Python之外，还有很多各式各样功能丰富的Python控制台可以供我们使用。比如Windows和OS X上的Python都附带了一个名为Idle的软件（Linux用户也可以通过安装<code class="docutils literal"><span class="pre">idle-python2.6</span></code>或者<code class="docutils literal"><span class="pre">idle-python2.7</span></code>来获得这个软件），只要在命令行中输入<code class="docutils literal"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">idlelib.idle</span></code>就可以启动它。Idle是一个相当基础的编辑器兼控制台，适合于那些刚开始学习编程的人使用，而另外一些人则喜欢使用提供了丰富功能的IPython作为Python的控制台，你可以根据自己的实际情况来选择合适的软件。</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>OS X和Windows的Redis</p>
+<p class="last">目前Windows和OS X使用的预编译Redis都是2.4版本的。因为本书在某些章节里面会用到Redis 2.6或者之后的版本才支持的新特性，所以如果你发现书中的程序不能正常运作，并且你使用的是Redis 2.4，那么有可能这些程序里面用到了Redis 2.6才有的新特性。本书第3章列举了一些需要用到新特性的例子。</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>配置Redis</p>
+<p class="last">在默认情况下，Redis会根据配置使用快照持久化或者AOF持久化来保存数据，直到客户端发送<code class="docutils literal"><span class="pre">SHUTDOWN</span></code>命令为止。如果用户在启动Redis时没有指定持久化文件的保存位置，那么持久化文件将会被保存到Redis启动时所使用的路径上面。改变持久化文件的保存路径需要对<code class="docutils literal"><span class="pre">redis.conf</span></code>文件进行修改，并根据你的平台选用合适的系统启动脚本，另外别忘了把已有的持久化文件移动到配置指定的路径上面。关于配置Redis的更多消息可以参考本书的第4章。</p>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>hiredis在非Linux平台上是否可用？</p>
+<p class="last">正在使用Windows系统或者OS X系统，但是阅读了Debian/Ubuntu安装步骤的读者可能会发现，在Linux系统上，我们为Python安装了一个名为<code class="docutils literal"><span class="pre">hiredis</span></code>的库，这个库是一个加速器，它可以将处理协议的工作交给一个C库来完成。尽管这个库可以在Windows和OS X上进行编译，但网上很少有人会提供这个库的二进制版本，所以如果读者想要在Windows或者OS X上编译并使用<code class="docutils literal"><span class="pre">hiredis</span></code>的话，那么只能靠自己了。</p>
+</div>
+<p>本书的各个章节会时不时地使用Python控制台来展示如何与Redis进行交互，并在本书的正文中展示用Python编写的函数定义和可执行语句。在不使用Python控制台的情况下，我们假设那些在正文中展示的函数定义都位于一个Python模块里面。如果你以前从来没有使用过Python，那么你应该阅读Python的模块教程（<a class="reference external" href="http://docs.python.org/tutorial/modules.html">http://docs.python.org/tutorial/modules.html</a>），从开头直到6.1.1节介绍的所有内容，了解模块的定义以及将模块当作脚本来执行的方法。</p>
+<p>如果读者并不熟悉Python，但是能够通过阅读语言文档和教程来了解一门语言的话，那么可以考虑完整地阅读一遍Python语言教程（<a class="reference external" href="http://docs.python.org/tutorial/">http://docs.python.org/tutorial/</a>）。如果读者只对Python语法和语义中最重要的部分感兴趣，那么可以阅读教程的第3章到第7章，然后再读一下有关生成器的9.10节和9.11节，因为本书会在好几个地方用到生成器。</p>
+<p>现在你已经成功地运行了Redis和Python解释器了，如果你是根据本书第1章的引用信息跳到这个附录来的，那么现在你可以掉转头去继续阅读第1章的后续内容了。</p>
+<p>如果你在安装Redis或者Python的过程中遇到了困难，那么请到Maning的<em>Redis实战</em>论坛上发布求助信息，或者查看已有的帖子，看看是否已经有人解决了你遇到的问题。</p>
+<hr class="docutils" />
+<table class="docutils footnote" frame="void" id="f1" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label"><a class="fn-backref" href="#id1">[1]</a></td><td>有经验的Python用户可能会问，为什么要安装<code class="docutils literal"><span class="pre">setuptools</span></code>而不是<code class="docutils literal"><span class="pre">pip</span></code>呢？（<code class="docutils literal"><span class="pre">pip</span></code>是另一个用于安装Python库的软件包。）这是因为<code class="docutils literal"><span class="pre">pip</span></code>进行简易下载（easy download）所需的<code class="docutils literal"><span class="pre">virtualenv</span></code>不在本书介绍的内容范围之内。</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisinaction'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="appendx-b.html" title="附录B 其他资源和参考资料"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="chapter3.html" title="第3章 Redis命令"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 实战</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, 黄健宏（huangz）.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
+    </div>
+  </body>
+</html>
