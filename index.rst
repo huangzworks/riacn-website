@@ -203,6 +203,23 @@ Josiah 开始创作这本《Redis 实战》。
 请访问他的 `twitter <https://twitter.com/dr_josiah>`_ 、 `博客 <http://www.dr-josiah.com/>`_ 或者 `github <https://github.com/josiahcarlson>`_ 。
 
 
+作序者简介
+----------------
+
+.. image:: antirez.jpg
+   :align: left
+
+Redis 的作者 Salvatore Sanfilippo 亲自为《Redis实战》撰写了序言。
+他在序言中介绍了创作 Redis 的原因和经过，
+回顾了这几年来 Redis 的发展，
+并在最后向大家推荐了《Redis实战》这本书。
+
+要了解 Salvatore Sanfilippo 的更多信息，
+请访问他的个人主页： `invece.org <http://invece.org>`_ 。
+
+|
+|
+
 译者简介
 ------------
 
