@@ -173,7 +173,7 @@ Redis实战
 作者简介
 ------------
 
-.. image:: author.jpeg
+.. image:: dr_j.jpg
    :align: left
 
 在大学毕业之后，
