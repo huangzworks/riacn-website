@@ -250,3 +250,11 @@ http://book.douban.com/subject/26612779/
 《Redis in Action》翻译记事，
 这篇文章记录了《Redis实战》的诞生过程：
 http://blog.huangz.me/diary/2015/memories-of-redis-in-action-translation.html
+
+
+参加群讨论
+----------------
+
+欢迎各位《Redis实战》读者加入 Redis 技术讨论 QQ 群 398976550 ， 
+你可以在群里面分享你的阅读心得和 Redis 使用经验，
+又或者跟其他人讨论你在使用 Redis 过程中遇到的问题。
