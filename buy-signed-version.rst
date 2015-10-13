@@ -9,6 +9,9 @@
     谢谢各位的支持！
     —— 黄健宏， 2015 年 10 月 12 日。
 
+.. image:: riacn-cover-small.png
+   :align: right
+
 为了感谢读者们对《Redis实战》的支持，
 并庆祝《Redis实战》正式发售，
 本书的译者专门为各位读者提供了译者签名版可供选购。
@@ -98,6 +101,9 @@
 
 购买《Redis设计与实现》作者签名版
 --------------------------------------
+
+.. image:: redisbook-cover-small.jpg
+   :align: right
 
 为庆祝《Redis实战》签名版正式发售，
 原本已经绝版的\ `《Redis设计与实现》 <http://redisbook.com/>`_\ 作者签名版也将同时发售！
