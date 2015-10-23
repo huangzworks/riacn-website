@@ -30,8 +30,9 @@ Redis实战
 ------------------
 
 购买纸质书请访问以下网店：
-`异步社区（人民邮电出版社） <http://www.epubit.com.cn/book/details/4035>`_ 、
-`京东商城 <http://search.jd.com/Search?keyword=redis%E5%AE%9E%E6%88%98&enc=utf-8>`_
+`异步社区 <http://www.epubit.com.cn/book/details/4035>`_ 、
+`京东 <http://item.jd.com/11791607.html>`_ 、
+`互动出版网 <http://product.china-pub.com/4881439>`_
 
 除了以上网店销售的标准版本之外，
 本书的译者还提供了《Redis实战》译者签名版可供选购，
