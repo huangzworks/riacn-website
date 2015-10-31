@@ -59,382 +59,382 @@
             
   <div class="section" id="id1">
 <h1>第 4 章相关源代码<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+<div class="highlight-python"><div class="highlight"><pre># coding: utf-8
 
-<span class="kn">import</span> <span class="nn">os</span>
-<span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">import</span> <span class="nn">unittest</span>
-<span class="kn">import</span> <span class="nn">uuid</span>
+import os
+import time
+import unittest
+import uuid
 
-<span class="kn">import</span> <span class="nn">redis</span>
-
-
-<span class="c"># 代码清单 4-1</span>
-<span class="sd">&#39;&#39;&#39;</span>
-<span class="sd"># &lt;start id=&quot;persistence-options&quot;/&gt;</span>
-<span class="sd">save 60 1000                        # 快照持久化选项。</span>
-<span class="sd">stop-writes-on-bgsave-error no      #</span>
-<span class="sd">rdbcompression yes                  #</span>
-<span class="sd">dbfilename dump.rdb                 #</span>
-
-<span class="sd">appendonly no                       # 只追加文件持久化选项。</span>
-<span class="sd">appendfsync everysec                #</span>
-<span class="sd">no-appendfsync-on-rewrite no        #</span>
-<span class="sd">auto-aof-rewrite-percentage 100     #</span>
-<span class="sd">auto-aof-rewrite-min-size 64mb      #</span>
-
-<span class="sd">dir ./                              # 共享选项，这个选项决定了快照文件和只追加文件的保存位置。</span>
-<span class="sd">&#39;&#39;&#39;</span>
+import redis
 
 
-<span class="c"># 代码清单 4-2</span>
-<span class="c"># &lt;start id=&quot;process-logs-progress&quot;/&gt;</span>
-<span class="c"># 日志处理函数接受的其中一个参数为回调函数，</span>
-<span class="c"># 这个回调函数接受一个Redis连接和一个日志行作为参数，</span>
-<span class="c"># 并通过调用流水线对象的方法来执行Redis命令。</span>
-<span class="k">def</span> <span class="nf">process_logs</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">callback</span><span class="p">):</span>
-    <span class="c"># 获取文件当前的处理进度。</span>
-    <span class="n">current_file</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">mget</span><span class="p">(</span> 
-        <span class="s">&#39;progress:file&#39;</span><span class="p">,</span> <span class="s">&#39;progress:position&#39;</span><span class="p">)</span> 
+# 代码清单 4-1
+&#39;&#39;&#39;
+# &lt;start id=&quot;persistence-options&quot;/&gt;
+save 60 1000                        # 快照持久化选项。
+stop-writes-on-bgsave-error no      #
+rdbcompression yes                  #
+dbfilename dump.rdb                 #
 
-    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">()</span>
+appendonly no                       # 只追加文件持久化选项。
+appendfsync everysec                #
+no-appendfsync-on-rewrite no        #
+auto-aof-rewrite-percentage 100     #
+auto-aof-rewrite-min-size 64mb      #
 
-    <span class="c"># 通过使用闭包（closure）来减少重复代码</span>
-    <span class="k">def</span> <span class="nf">update_progress</span><span class="p">():</span>    
-        <span class="c"># 更新正在处理的日志文件的名字和偏移量。</span>
-        <span class="n">pipe</span><span class="o">.</span><span class="n">mset</span><span class="p">({</span>
-            <span class="s">&#39;progress:file&#39;</span><span class="p">:</span> <span class="n">fname</span><span class="p">,</span>
-            <span class="s">&#39;progress:position&#39;</span><span class="p">:</span> <span class="n">offset</span> 
-        <span class="p">})</span>
-        <span class="c"># 这个语句负责执行实际的日志更新操作，</span>
-        <span class="c"># 并将日志文件的名字和目前的处理进度记录到Redis里面。</span>
-        <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>
-
-    <span class="c"># 有序地遍历各个日志文件。</span>
-    <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">path</span><span class="p">)):</span> 
-        <span class="c"># 略过所有已处理的日志文件。</span>
-        <span class="k">if</span> <span class="n">fname</span> <span class="o">&lt;</span> <span class="n">current_file</span><span class="p">:</span>
-            <span class="k">continue</span>
-
-        <span class="n">inp</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">fname</span><span class="p">),</span> <span class="s">&#39;rb&#39;</span><span class="p">)</span>
-        <span class="c"># 在接着处理一个因为系统崩溃而未能完成处理的日志文件时，略过已处理的内容。</span>
-        <span class="k">if</span> <span class="n">fname</span> <span class="o">==</span> <span class="n">current_file</span><span class="p">:</span>
-            <span class="n">inp</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span> 
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
-
-        <span class="n">current_file</span> <span class="o">=</span> <span class="bp">None</span>
-
-        <span class="c"># 枚举函数遍历一个由文件行组成的序列，</span>
-        <span class="c"># 并返回任意多个二元组，</span>
-        <span class="c"># 每个二元组包含了行号lno和行数据line，</span>
-        <span class="c"># 其中行号从0开始。</span>
-        <span class="k">for</span> <span class="n">lno</span><span class="p">,</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">inp</span><span class="p">):</span>
-            <span class="c"># 处理日志行。</span>
-            <span class="n">callback</span><span class="p">(</span><span class="n">pipe</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
-            <span class="c"># 更新已处理内容的偏移量。</span>
-            <span class="n">offset</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> 
-
-            <span class="c"># 每当处理完1000个日志行或者处理完整个日志文件的时候，</span>
-            <span class="c"># 都更新一次文件的处理进度。</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">lno</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">1000</span><span class="p">:</span> 
-                <span class="n">update_progress</span><span class="p">()</span>
-
-        <span class="n">update_progress</span><span class="p">()</span>
-
-        <span class="n">inp</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-<span class="c"># &lt;end id=&quot;process-logs-progress&quot;/&gt;</span>
+dir ./                              # 共享选项，这个选项决定了快照文件和只追加文件的保存位置。
+&#39;&#39;&#39;
 
 
-<span class="c"># 代码清单 4-3</span>
-<span class="c"># &lt;start id=&quot;wait-for-sync&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">wait_for_sync</span><span class="p">(</span><span class="n">mconn</span><span class="p">,</span> <span class="n">sconn</span><span class="p">):</span>
-    <span class="n">identifier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
-    <span class="c"># 将令牌添加至主服务器。</span>
-    <span class="n">mconn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;sync:wait&#39;</span><span class="p">,</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span> 
+# 代码清单 4-2
+# &lt;start id=&quot;process-logs-progress&quot;/&gt;
+# 日志处理函数接受的其中一个参数为回调函数，
+# 这个回调函数接受一个Redis连接和一个日志行作为参数，
+# 并通过调用流水线对象的方法来执行Redis命令。
+def process_logs(conn, path, callback):
+    # 获取文件当前的处理进度。
+    current_file, offset = conn.mget( 
+        &#39;progress:file&#39;, &#39;progress:position&#39;) 
 
-    <span class="c"># 如果有必要的话，等待从服务器完成同步。</span>
-    <span class="k">while</span> <span class="ow">not</span> <span class="n">sconn</span><span class="o">.</span><span class="n">info</span><span class="p">()[</span><span class="s">&#39;master_link_status&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="s">&#39;up&#39;</span><span class="p">:</span> 
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">001</span><span class="p">)</span>
+    pipe = conn.pipeline()
 
-    <span class="c"># 等待从服务器接收数据更新。</span>
-    <span class="k">while</span> <span class="ow">not</span> <span class="n">sconn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;sync:wait&#39;</span><span class="p">,</span> <span class="n">identifier</span><span class="p">):</span> 
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">001</span><span class="p">)</span>
+    # 通过使用闭包（closure）来减少重复代码
+    def update_progress():    
+        # 更新正在处理的日志文件的名字和偏移量。
+        pipe.mset({
+            &#39;progress:file&#39;: fname,
+            &#39;progress:position&#39;: offset 
+        })
+        # 这个语句负责执行实际的日志更新操作，
+        # 并将日志文件的名字和目前的处理进度记录到Redis里面。
+        pipe.execute()
 
-    <span class="c"># 最多只等待一秒钟。</span>
-    <span class="n">deadline</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="mf">1.01</span>  
-    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">deadline</span><span class="p">:</span> 
-        <span class="c"># 检查数据更新是否已经被同步到了磁盘。</span>
-        <span class="k">if</span> <span class="n">sconn</span><span class="o">.</span><span class="n">info</span><span class="p">()[</span><span class="s">&#39;aof_pending_bio_fsync&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">break</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">001</span><span class="p">)</span>
+    # 有序地遍历各个日志文件。
+    for fname in sorted(os.listdir(path)): 
+        # 略过所有已处理的日志文件。
+        if fname &lt; current_file:
+            continue
 
-    <span class="c"># 清理刚刚创建的新令牌以及之前可能留下的旧令牌。</span>
-    <span class="n">mconn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;sync:wait&#39;</span><span class="p">,</span> <span class="n">identifier</span><span class="p">)</span>
-    <span class="n">mconn</span><span class="o">.</span><span class="n">zremrangebyscore</span><span class="p">(</span><span class="s">&#39;sync:wait&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="mi">900</span><span class="p">)</span> 
-<span class="c"># &lt;end id=&quot;wait-for-sync&quot;/&gt;</span>
+        inp = open(os.path.join(path, fname), &#39;rb&#39;)
+        # 在接着处理一个因为系统崩溃而未能完成处理的日志文件时，略过已处理的内容。
+        if fname == current_file:
+            inp.seek(int(offset, 10)) 
+        else:
+            offset = 0
 
+        current_file = None
 
-<span class="c"># 代码清单 4-4</span>
-<span class="sd">&#39;&#39;&#39;</span>
-<span class="sd"># &lt;start id=&quot;master-failover&quot;/&gt;</span>
-<span class="sd">user@vpn-master ~:$ ssh root@machine-b.vpn                          # 通过VPN网络连接机器B。</span>
-<span class="sd">Last login: Wed Mar 28 15:21:06 2012 from ...                       #</span>
-<span class="sd">root@machine-b ~:$ redis-cli                                        # 启动命令行Redis客户端来执行几个简单的操作。</span>
-<span class="sd">redis 127.0.0.1:6379&gt; SAVE                                          # 执行SAVE命令，</span>
-<span class="sd">OK                                                                  # 并在命令完成之后，</span>
-<span class="sd">redis 127.0.0.1:6379&gt; QUIT                                          # 使用QUIT命令退出客户端。</span>
-<span class="sd">root@machine-b ~:$ scp \\                                           # 将快照文件发送至新的主服务器——机器C。</span>
-<span class="sd">&gt; /var/local/redis/dump.rdb machine-c.vpn:/var/local/redis/         #</span>
-<span class="sd">dump.rdb                      100%   525MB  8.1MB/s   01:05         #</span>
-<span class="sd">root@machine-b ~:$ ssh machine-c.vpn                                # 连接新的主服务器并启动Redis。</span>
-<span class="sd">Last login: Tue Mar 27 12:42:31 2012 from ...                       #</span>
-<span class="sd">root@machine-c ~:$ sudo /etc/init.d/redis-server start              #</span>
-<span class="sd">Starting Redis server...                                            #</span>
-<span class="sd">root@machine-c ~:$ exit</span>
-<span class="sd">root@machine-b ~:$ redis-cli                                        # 告知机器B的Redis，让它将机器C用作新的主服务器。</span>
-<span class="sd">redis 127.0.0.1:6379&gt; SLAVEOF machine-c.vpn 6379                    #</span>
-<span class="sd">OK                                                                  #</span>
-<span class="sd">redis 127.0.0.1:6379&gt; QUIT</span>
-<span class="sd">root@machine-b ~:$ exit</span>
-<span class="sd">user@vpn-master ~:$</span>
-<span class="sd"># &lt;end id=&quot;master-failover&quot;/&gt;</span>
-<span class="sd">#A Connect to machine B on our vpn network</span>
-<span class="sd">#B Start up the command line redis client to do a few simple operations</span>
-<span class="sd">#C Start a SAVE, and when it is done, QUIT so that we can continue</span>
-<span class="sd">#D Copy the snapshot over to the new master, machine C</span>
-<span class="sd">#E Connect to the new master and start Redis</span>
-<span class="sd">#F Tell machine B&#39;s Redis that it should use C as the new master</span>
-<span class="sd">#END</span>
-<span class="sd">&#39;&#39;&#39;</span>
+        # 枚举函数遍历一个由文件行组成的序列，
+        # 并返回任意多个二元组，
+        # 每个二元组包含了行号lno和行数据line，
+        # 其中行号从0开始。
+        for lno, line in enumerate(inp):
+            # 处理日志行。
+            callback(pipe, line)
+            # 更新已处理内容的偏移量。
+            offset += int(offset) + len(line) 
 
-<span class="c"># &lt;start id=&quot;_1313_14472_8342&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">list_item</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">,</span> <span class="n">price</span><span class="p">):</span>
-    <span class="n">inventory</span> <span class="o">=</span> <span class="s">&quot;inventory:</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="n">sellerid</span>
-    <span class="n">item</span> <span class="o">=</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="p">(</span><span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">)</span>
-    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="mi">5</span>
-    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">()</span>
+            # 每当处理完1000个日志行或者处理完整个日志文件的时候，
+            # 都更新一次文件的处理进度。
+            if not (lno+1) % 1000: 
+                update_progress()
 
-    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="c"># 监视用户包裹发生的变化。</span>
-            <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="n">inventory</span><span class="p">)</span>
-            <span class="c"># 验证用户是否仍然持有指定的物品。</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">pipe</span><span class="o">.</span><span class="n">sismember</span><span class="p">(</span><span class="n">inventory</span><span class="p">,</span> <span class="n">itemid</span><span class="p">):</span>
-                <span class="c"># 如果指定的物品不在用户的包裹里面，</span>
-                <span class="c"># 那么停止对包裹键的监视并返回一个空值。</span>
-                <span class="n">pipe</span><span class="o">.</span><span class="n">unwatch</span><span class="p">()</span> 
-                <span class="k">return</span> <span class="bp">None</span>
+        update_progress()
 
-            <span class="c"># 将指定的物品添加到物品买卖市场里面。</span>
-            <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>
-            <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">price</span><span class="p">)</span> 
-            <span class="n">pipe</span><span class="o">.</span><span class="n">srem</span><span class="p">(</span><span class="n">inventory</span><span class="p">,</span> <span class="n">itemid</span><span class="p">)</span>
-            <span class="c"># 如果执行execute方法没有引发WatchError异常，</span>
-            <span class="c"># 那么说明事务执行成功，</span>
-            <span class="c"># 并且对包裹键的监视也已经结束。</span>
-            <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>   
-            <span class="k">return</span> <span class="bp">True</span>
-        <span class="c"># 用户的包裹已经发生了变化；重试。</span>
-        <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span> 
-            <span class="k">pass</span>
-    <span class="k">return</span> <span class="bp">False</span>
-<span class="c"># &lt;end id=&quot;_1313_14472_8342&quot;/&gt;</span>
+        inp.close()
+# &lt;end id=&quot;process-logs-progress&quot;/&gt;
 
 
-<span class="c"># 代码清单 4-6</span>
-<span class="c"># &lt;start id=&quot;_1313_14472_8353&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">purchase_item</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">buyerid</span><span class="p">,</span> <span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">,</span> <span class="n">lprice</span><span class="p">):</span>
-    <span class="n">buyer</span> <span class="o">=</span> <span class="s">&quot;users:</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="n">buyerid</span>
-    <span class="n">seller</span> <span class="o">=</span> <span class="s">&quot;users:</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="n">sellerid</span>
-    <span class="n">item</span> <span class="o">=</span> <span class="s">&quot;</span><span class="si">%s</span><span class="s">.</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="p">(</span><span class="n">itemid</span><span class="p">,</span> <span class="n">sellerid</span><span class="p">)</span>
-    <span class="n">inventory</span> <span class="o">=</span> <span class="s">&quot;inventory:</span><span class="si">%s</span><span class="s">&quot;</span><span class="o">%</span><span class="n">buyerid</span>
-    <span class="n">end</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="mi">10</span>
-    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">()</span>
+# 代码清单 4-3
+# &lt;start id=&quot;wait-for-sync&quot;/&gt;
+def wait_for_sync(mconn, sconn):
+    identifier = str(uuid.uuid4())
+    # 将令牌添加至主服务器。
+    mconn.zadd(&#39;sync:wait&#39;, identifier, time.time()) 
 
-    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="c"># 对物品买卖市场以及买家账号信息的变化进行监视。</span>
-            <span class="n">pipe</span><span class="o">.</span><span class="n">watch</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">buyer</span><span class="p">)</span>
+    # 如果有必要的话，等待从服务器完成同步。
+    while not sconn.info()[&#39;master_link_status&#39;] != &#39;up&#39;: 
+        time.sleep(.001)
 
-            <span class="c"># 检查指定物品的价格是否出现了变化，</span>
-            <span class="c"># 以及买家是否有足够的钱来购买指定的物品。</span>
-            <span class="n">price</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span> 
-            <span class="n">funds</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">pipe</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="n">buyer</span><span class="p">,</span> <span class="s">&quot;funds&quot;</span><span class="p">))</span>  
-            <span class="k">if</span> <span class="n">price</span> <span class="o">!=</span> <span class="n">lprice</span> <span class="ow">or</span> <span class="n">price</span> <span class="o">&gt;</span> <span class="n">funds</span><span class="p">:</span>  
-                <span class="n">pipe</span><span class="o">.</span><span class="n">unwatch</span><span class="p">()</span>   
-                <span class="k">return</span> <span class="bp">None</span>
+    # 等待从服务器接收数据更新。
+    while not sconn.zscore(&#39;sync:wait&#39;, identifier): 
+        time.sleep(.001)
 
-            <span class="c"># 将买家支付的货款转移给卖家，并将卖家出售的物品移交给买家。</span>
-            <span class="n">pipe</span><span class="o">.</span><span class="n">multi</span><span class="p">()</span>
-            <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">seller</span><span class="p">,</span> <span class="s">&quot;funds&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">price</span><span class="p">))</span> 
-            <span class="n">pipe</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">buyer</span><span class="p">,</span> <span class="s">&quot;funds&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="o">-</span><span class="n">price</span><span class="p">))</span> 
-            <span class="n">pipe</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">inventory</span><span class="p">,</span> <span class="n">itemid</span><span class="p">)</span>  
-            <span class="n">pipe</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&quot;market:&quot;</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>  
-            <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>      
-            <span class="k">return</span> <span class="bp">True</span>
-        <span class="c"># 如果买家的账号或者物品买卖市场出现了变化，那么进行重试。</span>
-        <span class="k">except</span> <span class="n">redis</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">WatchError</span><span class="p">:</span>
-            <span class="k">pass</span>
+    # 最多只等待一秒钟。
+    deadline = time.time() + 1.01  
+    while time.time() &lt; deadline: 
+        # 检查数据更新是否已经被同步到了磁盘。
+        if sconn.info()[&#39;aof_pending_bio_fsync&#39;] == 0:
+            break
+        time.sleep(.001)
 
-    <span class="k">return</span> <span class="bp">False</span>
-<span class="c"># &lt;end id=&quot;_1313_14472_8353&quot;/&gt;</span>
+    # 清理刚刚创建的新令牌以及之前可能留下的旧令牌。
+    mconn.zrem(&#39;sync:wait&#39;, identifier)
+    mconn.zremrangebyscore(&#39;sync:wait&#39;, 0, time.time()-900) 
+# &lt;end id=&quot;wait-for-sync&quot;/&gt;
 
 
-<span class="c"># 代码清单 4-7</span>
-<span class="c"># &lt;start id=&quot;update-token&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">update_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">item</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-    <span class="c"># 获取时间戳。</span>
-    <span class="n">timestamp</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-    <span class="c"># 创建令牌与已登录用户之间的映射。</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;login:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
-    <span class="c"># 记录令牌最后一次出现的时间。</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">item</span><span class="p">:</span>
-        <span class="c"># 把用户浏览过的商品记录起来。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span> 
-        <span class="c"># 移除旧商品，只记录最新浏览的25件商品。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zremrangebyrank</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">26</span><span class="p">)</span> 
-        <span class="c"># 更新给定商品的被浏览次数。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> 
-<span class="c"># &lt;end id=&quot;update-token&quot;/&gt;</span>
+# 代码清单 4-4
+&#39;&#39;&#39;
+# &lt;start id=&quot;master-failover&quot;/&gt;
+user@vpn-master ~:$ ssh root@machine-b.vpn                          # 通过VPN网络连接机器B。
+Last login: Wed Mar 28 15:21:06 2012 from ...                       #
+root@machine-b ~:$ redis-cli                                        # 启动命令行Redis客户端来执行几个简单的操作。
+redis 127.0.0.1:6379&gt; SAVE                                          # 执行SAVE命令，
+OK                                                                  # 并在命令完成之后，
+redis 127.0.0.1:6379&gt; QUIT                                          # 使用QUIT命令退出客户端。
+root@machine-b ~:$ scp \\                                           # 将快照文件发送至新的主服务器——机器C。
+&gt; /var/local/redis/dump.rdb machine-c.vpn:/var/local/redis/         #
+dump.rdb                      100%   525MB  8.1MB/s   01:05         #
+root@machine-b ~:$ ssh machine-c.vpn                                # 连接新的主服务器并启动Redis。
+Last login: Tue Mar 27 12:42:31 2012 from ...                       #
+root@machine-c ~:$ sudo /etc/init.d/redis-server start              #
+Starting Redis server...                                            #
+root@machine-c ~:$ exit
+root@machine-b ~:$ redis-cli                                        # 告知机器B的Redis，让它将机器C用作新的主服务器。
+redis 127.0.0.1:6379&gt; SLAVEOF machine-c.vpn 6379                    #
+OK                                                                  #
+redis 127.0.0.1:6379&gt; QUIT
+root@machine-b ~:$ exit
+user@vpn-master ~:$
+# &lt;end id=&quot;master-failover&quot;/&gt;
+#A Connect to machine B on our vpn network
+#B Start up the command line redis client to do a few simple operations
+#C Start a SAVE, and when it is done, QUIT so that we can continue
+#D Copy the snapshot over to the new master, machine C
+#E Connect to the new master and start Redis
+#F Tell machine B&#39;s Redis that it should use C as the new master
+#END
+&#39;&#39;&#39;
+
+# &lt;start id=&quot;_1313_14472_8342&quot;/&gt;
+def list_item(conn, itemid, sellerid, price):
+    inventory = &quot;inventory:%s&quot;%sellerid
+    item = &quot;%s.%s&quot;%(itemid, sellerid)
+    end = time.time() + 5
+    pipe = conn.pipeline()
+
+    while time.time() &lt; end:
+        try:
+            # 监视用户包裹发生的变化。
+            pipe.watch(inventory)
+            # 验证用户是否仍然持有指定的物品。
+            if not pipe.sismember(inventory, itemid):
+                # 如果指定的物品不在用户的包裹里面，
+                # 那么停止对包裹键的监视并返回一个空值。
+                pipe.unwatch() 
+                return None
+
+            # 将指定的物品添加到物品买卖市场里面。
+            pipe.multi()
+            pipe.zadd(&quot;market:&quot;, item, price) 
+            pipe.srem(inventory, itemid)
+            # 如果执行execute方法没有引发WatchError异常，
+            # 那么说明事务执行成功，
+            # 并且对包裹键的监视也已经结束。
+            pipe.execute()   
+            return True
+        # 用户的包裹已经发生了变化；重试。
+        except redis.exceptions.WatchError: 
+            pass
+    return False
+# &lt;end id=&quot;_1313_14472_8342&quot;/&gt;
 
 
-<span class="c"># 代码清单 4-8</span>
-<span class="c"># &lt;start id=&quot;update-token-pipeline&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">update_token_pipeline</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">item</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-    <span class="n">timestamp</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-    <span class="c"># 设置流水线。</span>
-    <span class="n">pipe</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">pipeline</span><span class="p">(</span><span class="bp">False</span><span class="p">)</span>                         <span class="c">#A</span>
-    <span class="n">pipe</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;login:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
-    <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">item</span><span class="p">:</span>
-        <span class="n">pipe</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
-        <span class="n">pipe</span><span class="o">.</span><span class="n">zremrangebyrank</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">26</span><span class="p">)</span>
-        <span class="n">pipe</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="c"># 执行那些被流水线包裹的命令。</span>
-    <span class="n">pipe</span><span class="o">.</span><span class="n">execute</span><span class="p">()</span>                                      <span class="c">#B</span>
-<span class="c"># &lt;end id=&quot;update-token-pipeline&quot;/&gt;</span>
+# 代码清单 4-6
+# &lt;start id=&quot;_1313_14472_8353&quot;/&gt;
+def purchase_item(conn, buyerid, itemid, sellerid, lprice):
+    buyer = &quot;users:%s&quot;%buyerid
+    seller = &quot;users:%s&quot;%sellerid
+    item = &quot;%s.%s&quot;%(itemid, sellerid)
+    inventory = &quot;inventory:%s&quot;%buyerid
+    end = time.time() + 10
+    pipe = conn.pipeline()
+
+    while time.time() &lt; end:
+        try:
+            # 对物品买卖市场以及买家账号信息的变化进行监视。
+            pipe.watch(&quot;market:&quot;, buyer)
+
+            # 检查指定物品的价格是否出现了变化，
+            # 以及买家是否有足够的钱来购买指定的物品。
+            price = pipe.zscore(&quot;market:&quot;, item) 
+            funds = int(pipe.hget(buyer, &quot;funds&quot;))  
+            if price != lprice or price &gt; funds:  
+                pipe.unwatch()   
+                return None
+
+            # 将买家支付的货款转移给卖家，并将卖家出售的物品移交给买家。
+            pipe.multi()
+            pipe.hincrby(seller, &quot;funds&quot;, int(price)) 
+            pipe.hincrby(buyer, &quot;funds&quot;, int(-price)) 
+            pipe.sadd(inventory, itemid)  
+            pipe.zrem(&quot;market:&quot;, item)  
+            pipe.execute()      
+            return True
+        # 如果买家的账号或者物品买卖市场出现了变化，那么进行重试。
+        except redis.exceptions.WatchError:
+            pass
+
+    return False
+# &lt;end id=&quot;_1313_14472_8353&quot;/&gt;
 
 
-<span class="c"># 代码清单 4-9</span>
-<span class="c"># &lt;start id=&quot;simple-pipeline-benchmark-code&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">benchmark_update_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">duration</span><span class="p">):</span>
-    <span class="c"># 测试会分别执行update_token()函数和update_token_pipeline()函数。</span>
-    <span class="k">for</span> <span class="n">function</span> <span class="ow">in</span> <span class="p">(</span><span class="n">update_token</span><span class="p">,</span> <span class="n">update_token_pipeline</span><span class="p">):</span> 
-        <span class="c"># 设置计数器以及测试结束的条件。</span>
-        <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>                                               <span class="c">#B</span>
-        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>                                     <span class="c">#B</span>
-        <span class="n">end</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">duration</span>                                  <span class="c">#B</span>
-        <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">end</span><span class="p">:</span>
-            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="c"># 调用两个函数的其中一个。</span>
-            <span class="n">function</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;token&#39;</span><span class="p">,</span> <span class="s">&#39;user&#39;</span><span class="p">,</span> <span class="s">&#39;item&#39;</span><span class="p">)</span>             <span class="c">#C</span>
-        <span class="c"># 计算函数的执行时长。</span>
-        <span class="n">delta</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>                             <span class="c">#D</span>
-        <span class="c"># 打印测试结果。</span>
-        <span class="k">print</span> <span class="n">function</span><span class="o">.</span><span class="n">__name__</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">delta</span><span class="p">,</span> <span class="n">count</span> <span class="o">/</span> <span class="n">delta</span>    <span class="c">#E</span>
-<span class="c"># &lt;end id=&quot;simple-pipeline-benchmark-code&quot;/&gt;</span>
+# 代码清单 4-7
+# &lt;start id=&quot;update-token&quot;/&gt;
+def update_token(conn, token, user, item=None):
+    # 获取时间戳。
+    timestamp = time.time()
+    # 创建令牌与已登录用户之间的映射。
+    conn.hset(&#39;login:&#39;, token, user)
+    # 记录令牌最后一次出现的时间。
+    conn.zadd(&#39;recent:&#39;, token, timestamp)
+    if item:
+        # 把用户浏览过的商品记录起来。
+        conn.zadd(&#39;viewed:&#39; + token, item, timestamp) 
+        # 移除旧商品，只记录最新浏览的25件商品。
+        conn.zremrangebyrank(&#39;viewed:&#39; + token, 0, -26) 
+        # 更新给定商品的被浏览次数。
+        conn.zincrby(&#39;viewed:&#39;, item, -1) 
+# &lt;end id=&quot;update-token&quot;/&gt;
 
 
-<span class="c"># 代码清单 4-10</span>
-<span class="sd">&#39;&#39;&#39;</span>
-<span class="sd"># &lt;start id=&quot;redis-benchmark&quot;/&gt;</span>
-<span class="sd">$ redis-benchmark  -c 1 -q                               # 给定“-q”选项可以让程序简化输出结果，</span>
-<span class="sd">PING (inline): 34246.57 requests per second              # 给定“-c 1”选项让程序只使用一个客户端来进行测试。</span>
-<span class="sd">PING: 34843.21 requests per second</span>
-<span class="sd">MSET (10 keys): 24213.08 requests per second</span>
-<span class="sd">SET: 32467.53 requests per second</span>
-<span class="sd">GET: 33112.59 requests per second</span>
-<span class="sd">INCR: 32679.74 requests per second</span>
-<span class="sd">LPUSH: 33333.33 requests per second</span>
-<span class="sd">LPOP: 33670.04 requests per second</span>
-<span class="sd">SADD: 33222.59 requests per second</span>
-<span class="sd">SPOP: 34482.76 requests per second</span>
-<span class="sd">LPUSH (again, in order to bench LRANGE): 33222.59 requests per second</span>
-<span class="sd">LRANGE (first 100 elements): 22988.51 requests per second</span>
-<span class="sd">LRANGE (first 300 elements): 13888.89 requests per second</span>
-<span class="sd">LRANGE (first 450 elements): 11061.95 requests per second</span>
-<span class="sd">LRANGE (first 600 elements): 9041.59 requests per second</span>
-<span class="sd"># &lt;end id=&quot;redis-benchmark&quot;/&gt;</span>
-<span class="sd">#A We run with the &#39;-q&#39; option to get simple output, and &#39;-c 1&#39; to use a single client</span>
-<span class="sd">#END</span>
-<span class="sd">&#39;&#39;&#39;</span>
+# 代码清单 4-8
+# &lt;start id=&quot;update-token-pipeline&quot;/&gt;
+def update_token_pipeline(conn, token, user, item=None):
+    timestamp = time.time()
+    # 设置流水线。
+    pipe = conn.pipeline(False)                         #A
+    pipe.hset(&#39;login:&#39;, token, user)
+    pipe.zadd(&#39;recent:&#39;, token, timestamp)
+    if item:
+        pipe.zadd(&#39;viewed:&#39; + token, item, timestamp)
+        pipe.zremrangebyrank(&#39;viewed:&#39; + token, 0, -26)
+        pipe.zincrby(&#39;viewed:&#39;, item, -1)
+    # 执行那些被流水线包裹的命令。
+    pipe.execute()                                      #B
+# &lt;end id=&quot;update-token-pipeline&quot;/&gt;
 
-<span class="c">#--------------- 以下是用于测试代码的辅助函数 --------------------------------</span>
 
-<span class="k">class</span> <span class="nc">TestCh04</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="kn">import</span> <span class="nn">redis</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
+# 代码清单 4-9
+# &lt;start id=&quot;simple-pipeline-benchmark-code&quot;/&gt;
+def benchmark_update_token(conn, duration):
+    # 测试会分别执行update_token()函数和update_token_pipeline()函数。
+    for function in (update_token, update_token_pipeline): 
+        # 设置计数器以及测试结束的条件。
+        count = 0                                               #B
+        start = time.time()                                     #B
+        end = start + duration                                  #B
+        while time.time() &lt; end:
+            count += 1
+            # 调用两个函数的其中一个。
+            function(conn, &#39;token&#39;, &#39;user&#39;, &#39;item&#39;)             #C
+        # 计算函数的执行时长。
+        delta = time.time() - start                             #D
+        # 打印测试结果。
+        print function.__name__, count, delta, count / delta    #E
+# &lt;end id=&quot;simple-pipeline-benchmark-code&quot;/&gt;
 
-    <span class="k">def</span> <span class="nf">tearDown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">flushdb</span><span class="p">()</span>
-        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
-        <span class="k">print</span>
-        <span class="k">print</span>
 
-    <span class="c"># We can&#39;t test process_logs, as that would require writing to disk, which</span>
-    <span class="c"># we don&#39;t want to do.</span>
+# 代码清单 4-10
+&#39;&#39;&#39;
+# &lt;start id=&quot;redis-benchmark&quot;/&gt;
+$ redis-benchmark  -c 1 -q                               # 给定“-q”选项可以让程序简化输出结果，
+PING (inline): 34246.57 requests per second              # 给定“-c 1”选项让程序只使用一个客户端来进行测试。
+PING: 34843.21 requests per second
+MSET (10 keys): 24213.08 requests per second
+SET: 32467.53 requests per second
+GET: 33112.59 requests per second
+INCR: 32679.74 requests per second
+LPUSH: 33333.33 requests per second
+LPOP: 33670.04 requests per second
+SADD: 33222.59 requests per second
+SPOP: 34482.76 requests per second
+LPUSH (again, in order to bench LRANGE): 33222.59 requests per second
+LRANGE (first 100 elements): 22988.51 requests per second
+LRANGE (first 300 elements): 13888.89 requests per second
+LRANGE (first 450 elements): 11061.95 requests per second
+LRANGE (first 600 elements): 9041.59 requests per second
+# &lt;end id=&quot;redis-benchmark&quot;/&gt;
+#A We run with the &#39;-q&#39; option to get simple output, and &#39;-c 1&#39; to use a single client
+#END
+&#39;&#39;&#39;
 
-    <span class="c"># We also can&#39;t test wait_for_sync, as we can&#39;t guarantee that there are</span>
-    <span class="c"># multiple Redis servers running with the proper configuration</span>
+#--------------- 以下是用于测试代码的辅助函数 --------------------------------
 
-    <span class="k">def</span> <span class="nf">test_list_item</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="kn">import</span> <span class="nn">pprint</span>
-        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+class TestCh04(unittest.TestCase):
+    def setUp(self):
+        import redis
+        self.conn = redis.Redis(db=15)
+        self.conn.flushdb()
 
-        <span class="k">print</span> <span class="s">&quot;We need to set up just enough state so that a user can list an item&quot;</span>
-        <span class="n">seller</span> <span class="o">=</span> <span class="s">&#39;userX&#39;</span>
-        <span class="n">item</span> <span class="o">=</span> <span class="s">&#39;itemX&#39;</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;inventory:&#39;</span> <span class="o">+</span> <span class="n">seller</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
-        <span class="n">i</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;inventory:&#39;</span> <span class="o">+</span> <span class="n">seller</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;The user&#39;s inventory has:&quot;</span><span class="p">,</span> <span class="n">i</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
-        <span class="k">print</span>
+    def tearDown(self):
+        self.conn.flushdb()
+        del self.conn
+        print
+        print
 
-        <span class="k">print</span> <span class="s">&quot;Listing the item...&quot;</span>
-        <span class="n">l</span> <span class="o">=</span> <span class="n">list_item</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">seller</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Listing the item succeeded?&quot;</span><span class="p">,</span> <span class="n">l</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">l</span><span class="p">)</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;market:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;The market contains:&quot;</span>
-        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">any</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;itemX.userX&#39;</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">r</span><span class="p">))</span>
+    # We can&#39;t test process_logs, as that would require writing to disk, which
+    # we don&#39;t want to do.
 
-    <span class="k">def</span> <span class="nf">test_purchase_item</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">test_list_item</span><span class="p">()</span>
-        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
+    # We also can&#39;t test wait_for_sync, as we can&#39;t guarantee that there are
+    # multiple Redis servers running with the proper configuration
+
+    def test_list_item(self):
+        import pprint
+        conn = self.conn
+
+        print &quot;We need to set up just enough state so that a user can list an item&quot;
+        seller = &#39;userX&#39;
+        item = &#39;itemX&#39;
+        conn.sadd(&#39;inventory:&#39; + seller, item)
+        i = conn.smembers(&#39;inventory:&#39; + seller)
+        print &quot;The user&#39;s inventory has:&quot;, i
+        self.assertTrue(i)
+        print
+
+        print &quot;Listing the item...&quot;
+        l = list_item(conn, item, seller, 10)
+        print &quot;Listing the item succeeded?&quot;, l
+        self.assertTrue(l)
+        r = conn.zrange(&#39;market:&#39;, 0, -1, withscores=True)
+        print &quot;The market contains:&quot;
+        pprint.pprint(r)
+        self.assertTrue(r)
+        self.assertTrue(any(x[0] == &#39;itemX.userX&#39; for x in r))
+
+    def test_purchase_item(self):
+        self.test_list_item()
+        conn = self.conn
         
-        <span class="k">print</span> <span class="s">&quot;We need to set up just enough state so a user can buy an item&quot;</span>
-        <span class="n">buyer</span> <span class="o">=</span> <span class="s">&#39;userY&#39;</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;users:userY&#39;</span><span class="p">,</span> <span class="s">&#39;funds&#39;</span><span class="p">,</span> <span class="mi">125</span><span class="p">)</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="s">&#39;users:userY&#39;</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;The user has some money:&quot;</span><span class="p">,</span> <span class="n">r</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;funds&#39;</span><span class="p">))</span>
-        <span class="k">print</span>
+        print &quot;We need to set up just enough state so a user can buy an item&quot;
+        buyer = &#39;userY&#39;
+        conn.hset(&#39;users:userY&#39;, &#39;funds&#39;, 125)
+        r = conn.hgetall(&#39;users:userY&#39;)
+        print &quot;The user has some money:&quot;, r
+        self.assertTrue(r)
+        self.assertTrue(r.get(&#39;funds&#39;))
+        print
 
-        <span class="k">print</span> <span class="s">&quot;Let&#39;s purchase an item&quot;</span>
-        <span class="n">p</span> <span class="o">=</span> <span class="n">purchase_item</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;userY&#39;</span><span class="p">,</span> <span class="s">&#39;itemX&#39;</span><span class="p">,</span> <span class="s">&#39;userX&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Purchasing an item succeeded?&quot;</span><span class="p">,</span> <span class="n">p</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="s">&#39;users:userY&#39;</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Their money is now:&quot;</span><span class="p">,</span> <span class="n">r</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-        <span class="n">i</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">smembers</span><span class="p">(</span><span class="s">&#39;inventory:&#39;</span> <span class="o">+</span> <span class="n">buyer</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Their inventory is now:&quot;</span><span class="p">,</span> <span class="n">i</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="s">&#39;itemX&#39;</span> <span class="ow">in</span> <span class="n">i</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;market:&#39;</span><span class="p">,</span> <span class="s">&#39;itemX.userX&#39;</span><span class="p">),</span> <span class="bp">None</span><span class="p">)</span>
+        print &quot;Let&#39;s purchase an item&quot;
+        p = purchase_item(conn, &#39;userY&#39;, &#39;itemX&#39;, &#39;userX&#39;, 10)
+        print &quot;Purchasing an item succeeded?&quot;, p
+        self.assertTrue(p)
+        r = conn.hgetall(&#39;users:userY&#39;)
+        print &quot;Their money is now:&quot;, r
+        self.assertTrue(r)
+        i = conn.smembers(&#39;inventory:&#39; + buyer)
+        print &quot;Their inventory is now:&quot;, i
+        self.assertTrue(i)
+        self.assertTrue(&#39;itemX&#39; in i)
+        self.assertEquals(conn.zscore(&#39;market:&#39;, &#39;itemX.userX&#39;), None)
 
-    <span class="k">def</span> <span class="nf">test_benchmark_update_token</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">benchmark_update_token</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+    def test_benchmark_update_token(self):
+        benchmark_update_token(self.conn, 5)
 
-<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
-    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">()</span>
+if __name__ == &#39;__main__&#39;:
+    unittest.main()
 </pre></div>
 </div>
 </div>

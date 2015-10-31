@@ -59,397 +59,397 @@
             
   <div class="section" id="id1">
 <h1>第 2 章相关源代码<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
-
-<span class="kn">import</span> <span class="nn">json</span>
-<span class="kn">import</span> <span class="nn">threading</span>
-<span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">import</span> <span class="nn">unittest</span>
-<span class="kn">import</span> <span class="nn">urlparse</span>
-<span class="kn">import</span> <span class="nn">uuid</span>
-
-<span class="n">QUIT</span> <span class="o">=</span> <span class="bp">False</span>
-
-<span class="c"># 代码清单 2-1</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8266&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">check_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">conn</span><span class="o">.</span><span class="n">hget</span><span class="p">(</span><span class="s">&#39;login:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">)</span>   <span class="c"># 尝试获取并返回令牌对应的用户。</span>
-<span class="c"># &lt;end id=&quot;_1311_14471_8266&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-2</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8265&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">update_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">item</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-    <span class="c"># 获取当前时间戳。</span>
-    <span class="n">timestamp</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-    <span class="c"># 维持令牌与已登录用户之间的映射。</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;login:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
-    <span class="c"># 记录令牌最后一次出现的时间。</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">item</span><span class="p">:</span>
-        <span class="c"># 记录用户浏览过的商品。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
-        <span class="c"># 移除旧的记录，只保留用户最近浏览过的25个商品。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zremrangebyrank</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">26</span><span class="p">)</span>
-<span class="c"># &lt;end id=&quot;_1311_14471_8265&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-3</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8270&quot;/&gt;</span>
-<span class="n">QUIT</span> <span class="o">=</span> <span class="bp">False</span>
-<span class="n">LIMIT</span> <span class="o">=</span> <span class="mi">10000000</span>
-
-<span class="k">def</span> <span class="nf">clean_sessions</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
-    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
-        <span class="c"># 找出目前已有令牌的数量。</span>
-        <span class="n">size</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zcard</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">)</span>
-        <span class="c"># 令牌数量未超过限制，休眠并在之后重新检查。</span>
-        <span class="k">if</span> <span class="n">size</span> <span class="o">&lt;=</span> <span class="n">LIMIT</span><span class="p">:</span>
-            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-            <span class="k">continue</span>
-
-        <span class="c">#  获取需要移除的令牌ID。</span>
-        <span class="n">end_index</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="n">LIMIT</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-        <span class="n">tokens</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">end_index</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-
-        <span class="c"># 为那些将要被删除的令牌构建键名。</span>
-        <span class="n">session_keys</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="n">tokens</span><span class="p">:</span>
-            <span class="n">session_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">)</span>
-
-        <span class="c"># 移除最旧的那些令牌。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="o">*</span><span class="n">session_keys</span><span class="p">)</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">hdel</span><span class="p">(</span><span class="s">&#39;login:&#39;</span><span class="p">,</span> <span class="o">*</span><span class="n">tokens</span><span class="p">)</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">,</span> <span class="o">*</span><span class="n">tokens</span><span class="p">)</span>
-<span class="c"># &lt;end id=&quot;_1311_14471_8270&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-4</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8279&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">add_to_cart</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">session</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">count</span><span class="p">):</span>
-    <span class="k">if</span> <span class="n">count</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="c"># 从购物车里面移除指定的商品。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">hrem</span><span class="p">(</span><span class="s">&#39;cart:&#39;</span> <span class="o">+</span> <span class="n">session</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span> 
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c"># 将指定的商品添加到购物车。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;cart:&#39;</span> <span class="o">+</span> <span class="n">session</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span> 
-<span class="c"># &lt;end id=&quot;_1311_14471_8279&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-5</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8271&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">clean_full_sessions</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
-    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
-        <span class="n">size</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zcard</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">size</span> <span class="o">&lt;=</span> <span class="n">LIMIT</span><span class="p">:</span>
-            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-            <span class="k">continue</span>
-
-        <span class="n">end_index</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">size</span> <span class="o">-</span> <span class="n">LIMIT</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-        <span class="n">sessions</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">end_index</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-
-        <span class="n">session_keys</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">sess</span> <span class="ow">in</span> <span class="n">sessions</span><span class="p">:</span>
-            <span class="n">session_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">sess</span><span class="p">)</span>
-            <span class="n">session_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s">&#39;cart:&#39;</span> <span class="o">+</span> <span class="n">sess</span><span class="p">)</span>   <span class="c"># 新增加的这行代码用于删除旧会话对应用户的购物车。</span>
-
-        <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="o">*</span><span class="n">session_keys</span><span class="p">)</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">hdel</span><span class="p">(</span><span class="s">&#39;login:&#39;</span><span class="p">,</span> <span class="o">*</span><span class="n">sessions</span><span class="p">)</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">,</span> <span class="o">*</span><span class="n">sessions</span><span class="p">)</span>
-<span class="c"># &lt;end id=&quot;_1311_14471_8271&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-6</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8291&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">cache_request</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">callback</span><span class="p">):</span>
-    <span class="c"># 对于不能被缓存的请求，直接调用回调函数。</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">can_cache</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">callback</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-
-    <span class="c"># 将请求转换成一个简单的字符串键，方便之后进行查找。</span>
-    <span class="n">page_key</span> <span class="o">=</span> <span class="s">&#39;cache:&#39;</span> <span class="o">+</span> <span class="n">hash_request</span><span class="p">(</span><span class="n">request</span><span class="p">)</span> 
-    <span class="c"># 尝试查找被缓存的页面。</span>
-    <span class="n">content</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">page_key</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">content</span><span class="p">:</span>
-        <span class="c"># 如果页面还没有被缓存，那么生成页面。</span>
-        <span class="n">content</span> <span class="o">=</span> <span class="n">callback</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-        <span class="c"># 将新生成的页面放到缓存里面。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">setex</span><span class="p">(</span><span class="n">page_key</span><span class="p">,</span> <span class="n">content</span><span class="p">,</span> <span class="mi">300</span><span class="p">)</span>
-
-    <span class="c"># 返回页面。</span>
-    <span class="k">return</span> <span class="n">content</span>
-<span class="c"># &lt;end id=&quot;_1311_14471_8291&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-7</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8287&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">schedule_row_cache</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">row_id</span><span class="p">,</span> <span class="n">delay</span><span class="p">):</span>
-    <span class="c"># 先设置数据行的延迟值。</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;delay:&#39;</span><span class="p">,</span> <span class="n">row_id</span><span class="p">,</span> <span class="n">delay</span><span class="p">)</span> 
-    <span class="c"># 立即缓存数据行。</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;schedule:&#39;</span><span class="p">,</span> <span class="n">row_id</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())</span> 
-<span class="c"># &lt;end id=&quot;_1311_14471_8287&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-8</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8292&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">cache_rows</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
-    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
-        <span class="c"># 尝试获取下一个需要被缓存的数据行以及该行的调度时间戳，</span>
-        <span class="c"># 命令会返回一个包含零个或一个元组（tuple）的列表。</span>
-        <span class="nb">next</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;schedule:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span> 
-        <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">next</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">now</span><span class="p">:</span>
-            <span class="c"># 暂时没有行需要被缓存，休眠50毫秒后重试。</span>
-            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="o">.</span><span class="mo">05</span><span class="p">)</span> 
-            <span class="k">continue</span>
-
-        <span class="n">row_id</span> <span class="o">=</span> <span class="nb">next</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-        <span class="c"># 获取下一次调度前的延迟时间。</span>
-        <span class="n">delay</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;delay:&#39;</span><span class="p">,</span> <span class="n">row_id</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">delay</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="c"># 不必再缓存这个行，将它从缓存中移除。</span>
-            <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;delay:&#39;</span><span class="p">,</span> <span class="n">row_id</span><span class="p">)</span> 
-            <span class="n">conn</span><span class="o">.</span><span class="n">zrem</span><span class="p">(</span><span class="s">&#39;schedule:&#39;</span><span class="p">,</span> <span class="n">row_id</span><span class="p">)</span>
-            <span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="s">&#39;inv:&#39;</span> <span class="o">+</span> <span class="n">row_id</span><span class="p">)</span>
-            <span class="k">continue</span>
-
-        <span class="c"># 读取数据行。</span>
-        <span class="n">row</span> <span class="o">=</span> <span class="n">Inventory</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">row_id</span><span class="p">)</span>
-        <span class="c"># 更新调度时间并设置缓存值。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;schedule:&#39;</span><span class="p">,</span> <span class="n">row_id</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">delay</span><span class="p">)</span>         
-        <span class="n">conn</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s">&#39;inv:&#39;</span> <span class="o">+</span> <span class="n">row_id</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()))</span> 
-<span class="c"># &lt;end id=&quot;_1311_14471_8292&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-9</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8298&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">update_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">item</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-    <span class="n">timestamp</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">hset</span><span class="p">(</span><span class="s">&#39;login:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;recent:&#39;</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">item</span><span class="p">:</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">)</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zremrangebyrank</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">26</span><span class="p">)</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span><span class="p">,</span> <span class="n">item</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>                   <span class="c"># 这行代码是新添加的。</span>
-<span class="c"># &lt;end id=&quot;_1311_14471_8298&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-10</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8288&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">rescale_viewed</span><span class="p">(</span><span class="n">conn</span><span class="p">):</span>
-    <span class="k">while</span> <span class="ow">not</span> <span class="n">QUIT</span><span class="p">:</span>
-        <span class="c"># 删除所有排名在20 000名之后的商品。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zremrangebyrank</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">20001</span><span class="p">)</span> 
-        <span class="c"># 将浏览次数降低为原来的一半</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zinterstore</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s">&#39;viewed:&#39;</span><span class="p">:</span> <span class="o">.</span><span class="mi">5</span><span class="p">})</span> 
-        <span class="c"># 5分钟之后再执行这个操作。</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">300</span><span class="p">)</span> 
-<span class="c"># &lt;end id=&quot;_1311_14471_8288&quot;/&gt;</span>
-
-
-<span class="c"># 代码清单 2-11</span>
-<span class="c"># &lt;start id=&quot;_1311_14471_8289&quot;/&gt;</span>
-<span class="k">def</span> <span class="nf">can_cache</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-    <span class="c"># 尝试从页面里面取出商品ID。</span>
-    <span class="n">item_id</span> <span class="o">=</span> <span class="n">extract_item_id</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-    <span class="c"># 检查这个页面能否被缓存以及这个页面是否为商品页面。</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">item_id</span> <span class="ow">or</span> <span class="n">is_dynamic</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">False</span>
-    <span class="c"># 取得商品的浏览次数排名。</span>
-    <span class="n">rank</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrank</span><span class="p">(</span><span class="s">&#39;viewed:&#39;</span><span class="p">,</span> <span class="n">item_id</span><span class="p">)</span>
-    <span class="c"># 根据商品的浏览次数排名来判断是否需要缓存这个页面。</span>
-    <span class="k">return</span> <span class="n">rank</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">rank</span> <span class="o">&lt;</span> <span class="mi">10000</span> 
-<span class="c"># &lt;end id=&quot;_1311_14471_8289&quot;/&gt;</span>
-
-
-<span class="c">#--------------- 以下是用于测试代码的辅助函数 --------------------------------</span>
-
-<span class="k">def</span> <span class="nf">extract_item_id</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
-    <span class="n">parsed</span> <span class="o">=</span> <span class="n">urlparse</span><span class="o">.</span><span class="n">urlparse</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-    <span class="n">query</span> <span class="o">=</span> <span class="n">urlparse</span><span class="o">.</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">parsed</span><span class="o">.</span><span class="n">query</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;item&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[</span><span class="bp">None</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
-
-<span class="k">def</span> <span class="nf">is_dynamic</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
-    <span class="n">parsed</span> <span class="o">=</span> <span class="n">urlparse</span><span class="o">.</span><span class="n">urlparse</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
-    <span class="n">query</span> <span class="o">=</span> <span class="n">urlparse</span><span class="o">.</span><span class="n">parse_qs</span><span class="p">(</span><span class="n">parsed</span><span class="o">.</span><span class="n">query</span><span class="p">)</span>
-    <span class="k">return</span> <span class="s">&#39;_&#39;</span> <span class="ow">in</span> <span class="n">query</span>
-
-<span class="k">def</span> <span class="nf">hash_request</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
-    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="nb">hash</span><span class="p">(</span><span class="n">request</span><span class="p">))</span>
-
-<span class="k">class</span> <span class="nc">Inventory</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">id</span> <span class="o">=</span> <span class="nb">id</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">get</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">Inventory</span><span class="p">(</span><span class="nb">id</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s">&#39;id&#39;</span><span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s">&#39;data&#39;</span><span class="p">:</span><span class="s">&#39;data to cache...&#39;</span><span class="p">,</span> <span class="s">&#39;cached&#39;</span><span class="p">:</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()}</span>
-
-<span class="k">class</span> <span class="nc">TestCh02</span><span class="p">(</span><span class="n">unittest</span><span class="o">.</span><span class="n">TestCase</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="kn">import</span> <span class="nn">redis</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">conn</span> <span class="o">=</span> <span class="n">redis</span><span class="o">.</span><span class="n">Redis</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">tearDown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
-        <span class="n">to_del</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;login:*&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;recent:*&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;viewed:*&#39;</span><span class="p">)</span> <span class="o">+</span>
-            <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;cart:*&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;cache:*&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;delay:*&#39;</span><span class="p">)</span> <span class="o">+</span> 
-            <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;schedule:*&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="n">conn</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="s">&#39;inv:*&#39;</span><span class="p">))</span>
-        <span class="k">if</span> <span class="n">to_del</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">conn</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="o">*</span><span class="n">to_del</span><span class="p">)</span>
-        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
-        <span class="k">global</span> <span class="n">QUIT</span><span class="p">,</span> <span class="n">LIMIT</span>
-        <span class="n">QUIT</span> <span class="o">=</span> <span class="bp">False</span>
-        <span class="n">LIMIT</span> <span class="o">=</span> <span class="mi">10000000</span>
-        <span class="k">print</span>
-        <span class="k">print</span>
-
-    <span class="k">def</span> <span class="nf">test_login_cookies</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
-        <span class="k">global</span> <span class="n">LIMIT</span><span class="p">,</span> <span class="n">QUIT</span>
-        <span class="n">token</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
-
-        <span class="n">update_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="s">&#39;username&#39;</span><span class="p">,</span> <span class="s">&#39;itemX&#39;</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;We just logged-in/updated token:&quot;</span><span class="p">,</span> <span class="n">token</span>
-        <span class="k">print</span> <span class="s">&quot;For user:&quot;</span><span class="p">,</span> <span class="s">&#39;username&#39;</span>
-        <span class="k">print</span>
-
-        <span class="k">print</span> <span class="s">&quot;What username do we get when we look-up that token?&quot;</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">check_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">)</span>
-        <span class="k">print</span> <span class="n">r</span>
-        <span class="k">print</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-
-
-        <span class="k">print</span> <span class="s">&quot;Let&#39;s drop the maximum number of cookies to 0 to clean them out&quot;</span>
-        <span class="k">print</span> <span class="s">&quot;We will start a thread to do the cleaning, while we stop it later&quot;</span>
-
-        <span class="n">LIMIT</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">t</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">clean_sessions</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">conn</span><span class="p">,))</span>
-        <span class="n">t</span><span class="o">.</span><span class="n">setDaemon</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="c"># to make sure it dies if we ctrl+C quit</span>
-        <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">QUIT</span> <span class="o">=</span> <span class="bp">True</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">isAlive</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&quot;The clean sessions thread is still alive?!?&quot;</span><span class="p">)</span>
-
-        <span class="n">s</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hlen</span><span class="p">(</span><span class="s">&#39;login:&#39;</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;The current number of sessions still available is:&quot;</span><span class="p">,</span> <span class="n">s</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">test_shoppping_cart_cookies</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
-        <span class="k">global</span> <span class="n">LIMIT</span><span class="p">,</span> <span class="n">QUIT</span>
-        <span class="n">token</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
-
-        <span class="k">print</span> <span class="s">&quot;We&#39;ll refresh our session...&quot;</span>
-        <span class="n">update_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="s">&#39;username&#39;</span><span class="p">,</span> <span class="s">&#39;itemX&#39;</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;And add an item to the shopping cart&quot;</span>
-        <span class="n">add_to_cart</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="s">&quot;itemY&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="s">&#39;cart:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Our shopping cart currently has:&quot;</span><span class="p">,</span> <span class="n">r</span>
-        <span class="k">print</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">r</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">)</span>
-
-        <span class="k">print</span> <span class="s">&quot;Let&#39;s clean out our sessions and carts&quot;</span>
-        <span class="n">LIMIT</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">t</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">clean_full_sessions</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">conn</span><span class="p">,))</span>
-        <span class="n">t</span><span class="o">.</span><span class="n">setDaemon</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="c"># to make sure it dies if we ctrl+C quit</span>
-        <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">QUIT</span> <span class="o">=</span> <span class="bp">True</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">isAlive</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&quot;The clean sessions thread is still alive?!?&quot;</span><span class="p">)</span>
-
-        <span class="n">r</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="s">&#39;cart:&#39;</span> <span class="o">+</span> <span class="n">token</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Our shopping cart now contains:&quot;</span><span class="p">,</span> <span class="n">r</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">test_cache_request</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
-        <span class="n">token</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
-
-        <span class="k">def</span> <span class="nf">callback</span><span class="p">(</span><span class="n">request</span><span class="p">):</span>
-            <span class="k">return</span> <span class="s">&quot;content for &quot;</span> <span class="o">+</span> <span class="n">request</span>
-
-        <span class="n">update_token</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">token</span><span class="p">,</span> <span class="s">&#39;username&#39;</span><span class="p">,</span> <span class="s">&#39;itemX&#39;</span><span class="p">)</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="s">&#39;http://test.com/?item=itemX&#39;</span>
-        <span class="k">print</span> <span class="s">&quot;We are going to cache a simple request against&quot;</span><span class="p">,</span> <span class="n">url</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">cache_request</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">callback</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;We got initial content:&quot;</span><span class="p">,</span> <span class="nb">repr</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-        <span class="k">print</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-
-        <span class="k">print</span> <span class="s">&quot;To test that we&#39;ve cached the request, we&#39;ll pass a bad callback&quot;</span>
-        <span class="n">result2</span> <span class="o">=</span> <span class="n">cache_request</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;We ended up getting the same response!&quot;</span><span class="p">,</span> <span class="nb">repr</span><span class="p">(</span><span class="n">result2</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertEquals</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">result2</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">can_cache</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;http://test.com/&#39;</span><span class="p">))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">can_cache</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;http://test.com/?item=itemX&amp;_=1234536&#39;</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">test_cache_rows</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="kn">import</span> <span class="nn">pprint</span>
-        <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conn</span>
-        <span class="k">global</span> <span class="n">QUIT</span>
+<div class="highlight-python"><div class="highlight"><pre># coding: utf-8
+
+import json
+import threading
+import time
+import unittest
+import urlparse
+import uuid
+
+QUIT = False
+
+# 代码清单 2-1
+# &lt;start id=&quot;_1311_14471_8266&quot;/&gt;
+def check_token(conn, token):
+    return conn.hget(&#39;login:&#39;, token)   # 尝试获取并返回令牌对应的用户。
+# &lt;end id=&quot;_1311_14471_8266&quot;/&gt;
+
+
+# 代码清单 2-2
+# &lt;start id=&quot;_1311_14471_8265&quot;/&gt;
+def update_token(conn, token, user, item=None):
+    # 获取当前时间戳。
+    timestamp = time.time()
+    # 维持令牌与已登录用户之间的映射。
+    conn.hset(&#39;login:&#39;, token, user)
+    # 记录令牌最后一次出现的时间。
+    conn.zadd(&#39;recent:&#39;, token, timestamp)
+    if item:
+        # 记录用户浏览过的商品。
+        conn.zadd(&#39;viewed:&#39; + token, item, timestamp)
+        # 移除旧的记录，只保留用户最近浏览过的25个商品。
+        conn.zremrangebyrank(&#39;viewed:&#39; + token, 0, -26)
+# &lt;end id=&quot;_1311_14471_8265&quot;/&gt;
+
+
+# 代码清单 2-3
+# &lt;start id=&quot;_1311_14471_8270&quot;/&gt;
+QUIT = False
+LIMIT = 10000000
+
+def clean_sessions(conn):
+    while not QUIT:
+        # 找出目前已有令牌的数量。
+        size = conn.zcard(&#39;recent:&#39;)
+        # 令牌数量未超过限制，休眠并在之后重新检查。
+        if size &lt;= LIMIT:
+            time.sleep(1)
+            continue
+
+        #  获取需要移除的令牌ID。
+        end_index = min(size - LIMIT, 100)
+        tokens = conn.zrange(&#39;recent:&#39;, 0, end_index-1)
+
+        # 为那些将要被删除的令牌构建键名。
+        session_keys = []
+        for token in tokens:
+            session_keys.append(&#39;viewed:&#39; + token)
+
+        # 移除最旧的那些令牌。
+        conn.delete(*session_keys)
+        conn.hdel(&#39;login:&#39;, *tokens)
+        conn.zrem(&#39;recent:&#39;, *tokens)
+# &lt;end id=&quot;_1311_14471_8270&quot;/&gt;
+
+
+# 代码清单 2-4
+# &lt;start id=&quot;_1311_14471_8279&quot;/&gt;
+def add_to_cart(conn, session, item, count):
+    if count &lt;= 0:
+        # 从购物车里面移除指定的商品。
+        conn.hrem(&#39;cart:&#39; + session, item) 
+    else:
+        # 将指定的商品添加到购物车。
+        conn.hset(&#39;cart:&#39; + session, item, count) 
+# &lt;end id=&quot;_1311_14471_8279&quot;/&gt;
+
+
+# 代码清单 2-5
+# &lt;start id=&quot;_1311_14471_8271&quot;/&gt;
+def clean_full_sessions(conn):
+    while not QUIT:
+        size = conn.zcard(&#39;recent:&#39;)
+        if size &lt;= LIMIT:
+            time.sleep(1)
+            continue
+
+        end_index = min(size - LIMIT, 100)
+        sessions = conn.zrange(&#39;recent:&#39;, 0, end_index-1)
+
+        session_keys = []
+        for sess in sessions:
+            session_keys.append(&#39;viewed:&#39; + sess)
+            session_keys.append(&#39;cart:&#39; + sess)   # 新增加的这行代码用于删除旧会话对应用户的购物车。
+
+        conn.delete(*session_keys)
+        conn.hdel(&#39;login:&#39;, *sessions)
+        conn.zrem(&#39;recent:&#39;, *sessions)
+# &lt;end id=&quot;_1311_14471_8271&quot;/&gt;
+
+
+# 代码清单 2-6
+# &lt;start id=&quot;_1311_14471_8291&quot;/&gt;
+def cache_request(conn, request, callback):
+    # 对于不能被缓存的请求，直接调用回调函数。
+    if not can_cache(conn, request):
+        return callback(request)
+
+    # 将请求转换成一个简单的字符串键，方便之后进行查找。
+    page_key = &#39;cache:&#39; + hash_request(request) 
+    # 尝试查找被缓存的页面。
+    content = conn.get(page_key)
+
+    if not content:
+        # 如果页面还没有被缓存，那么生成页面。
+        content = callback(request)
+        # 将新生成的页面放到缓存里面。
+        conn.setex(page_key, content, 300)
+
+    # 返回页面。
+    return content
+# &lt;end id=&quot;_1311_14471_8291&quot;/&gt;
+
+
+# 代码清单 2-7
+# &lt;start id=&quot;_1311_14471_8287&quot;/&gt;
+def schedule_row_cache(conn, row_id, delay):
+    # 先设置数据行的延迟值。
+    conn.zadd(&#39;delay:&#39;, row_id, delay) 
+    # 立即缓存数据行。
+    conn.zadd(&#39;schedule:&#39;, row_id, time.time()) 
+# &lt;end id=&quot;_1311_14471_8287&quot;/&gt;
+
+
+# 代码清单 2-8
+# &lt;start id=&quot;_1311_14471_8292&quot;/&gt;
+def cache_rows(conn):
+    while not QUIT:
+        # 尝试获取下一个需要被缓存的数据行以及该行的调度时间戳，
+        # 命令会返回一个包含零个或一个元组（tuple）的列表。
+        next = conn.zrange(&#39;schedule:&#39;, 0, 0, withscores=True) 
+        now = time.time()
+        if not next or next[0][1] &gt; now:
+            # 暂时没有行需要被缓存，休眠50毫秒后重试。
+            time.sleep(.05) 
+            continue
+
+        row_id = next[0][0]
+        # 获取下一次调度前的延迟时间。
+        delay = conn.zscore(&#39;delay:&#39;, row_id)
+        if delay &lt;= 0:
+            # 不必再缓存这个行，将它从缓存中移除。
+            conn.zrem(&#39;delay:&#39;, row_id) 
+            conn.zrem(&#39;schedule:&#39;, row_id)
+            conn.delete(&#39;inv:&#39; + row_id)
+            continue
+
+        # 读取数据行。
+        row = Inventory.get(row_id)
+        # 更新调度时间并设置缓存值。
+        conn.zadd(&#39;schedule:&#39;, row_id, now + delay)         
+        conn.set(&#39;inv:&#39; + row_id, json.dumps(row.to_dict())) 
+# &lt;end id=&quot;_1311_14471_8292&quot;/&gt;
+
+
+# 代码清单 2-9
+# &lt;start id=&quot;_1311_14471_8298&quot;/&gt;
+def update_token(conn, token, user, item=None):
+    timestamp = time.time()
+    conn.hset(&#39;login:&#39;, token, user)
+    conn.zadd(&#39;recent:&#39;, token, timestamp)
+    if item:
+        conn.zadd(&#39;viewed:&#39; + token, item, timestamp)
+        conn.zremrangebyrank(&#39;viewed:&#39; + token, 0, -26)
+        conn.zincrby(&#39;viewed:&#39;, item, -1)                   # 这行代码是新添加的。
+# &lt;end id=&quot;_1311_14471_8298&quot;/&gt;
+
+
+# 代码清单 2-10
+# &lt;start id=&quot;_1311_14471_8288&quot;/&gt;
+def rescale_viewed(conn):
+    while not QUIT:
+        # 删除所有排名在20 000名之后的商品。
+        conn.zremrangebyrank(&#39;viewed:&#39;, 0, -20001) 
+        # 将浏览次数降低为原来的一半
+        conn.zinterstore(&#39;viewed:&#39;, {&#39;viewed:&#39;: .5}) 
+        # 5分钟之后再执行这个操作。
+        time.sleep(300) 
+# &lt;end id=&quot;_1311_14471_8288&quot;/&gt;
+
+
+# 代码清单 2-11
+# &lt;start id=&quot;_1311_14471_8289&quot;/&gt;
+def can_cache(conn, request):
+    # 尝试从页面里面取出商品ID。
+    item_id = extract_item_id(request)
+    # 检查这个页面能否被缓存以及这个页面是否为商品页面。
+    if not item_id or is_dynamic(request):
+        return False
+    # 取得商品的浏览次数排名。
+    rank = conn.zrank(&#39;viewed:&#39;, item_id)
+    # 根据商品的浏览次数排名来判断是否需要缓存这个页面。
+    return rank is not None and rank &lt; 10000 
+# &lt;end id=&quot;_1311_14471_8289&quot;/&gt;
+
+
+#--------------- 以下是用于测试代码的辅助函数 --------------------------------
+
+def extract_item_id(request):
+    parsed = urlparse.urlparse(request)
+    query = urlparse.parse_qs(parsed.query)
+    return (query.get(&#39;item&#39;) or [None])[0]
+
+def is_dynamic(request):
+    parsed = urlparse.urlparse(request)
+    query = urlparse.parse_qs(parsed.query)
+    return &#39;_&#39; in query
+
+def hash_request(request):
+    return str(hash(request))
+
+class Inventory(object):
+    def __init__(self, id):
+        self.id = id
+
+    @classmethod
+    def get(cls, id):
+        return Inventory(id)
+
+    def to_dict(self):
+        return {&#39;id&#39;:self.id, &#39;data&#39;:&#39;data to cache...&#39;, &#39;cached&#39;:time.time()}
+
+class TestCh02(unittest.TestCase):
+    def setUp(self):
+        import redis
+        self.conn = redis.Redis(db=15)
+
+    def tearDown(self):
+        conn = self.conn
+        to_del = (
+            conn.keys(&#39;login:*&#39;) + conn.keys(&#39;recent:*&#39;) + conn.keys(&#39;viewed:*&#39;) +
+            conn.keys(&#39;cart:*&#39;) + conn.keys(&#39;cache:*&#39;) + conn.keys(&#39;delay:*&#39;) + 
+            conn.keys(&#39;schedule:*&#39;) + conn.keys(&#39;inv:*&#39;))
+        if to_del:
+            self.conn.delete(*to_del)
+        del self.conn
+        global QUIT, LIMIT
+        QUIT = False
+        LIMIT = 10000000
+        print
+        print
+
+    def test_login_cookies(self):
+        conn = self.conn
+        global LIMIT, QUIT
+        token = str(uuid.uuid4())
+
+        update_token(conn, token, &#39;username&#39;, &#39;itemX&#39;)
+        print &quot;We just logged-in/updated token:&quot;, token
+        print &quot;For user:&quot;, &#39;username&#39;
+        print
+
+        print &quot;What username do we get when we look-up that token?&quot;
+        r = check_token(conn, token)
+        print r
+        print
+        self.assertTrue(r)
+
+
+        print &quot;Let&#39;s drop the maximum number of cookies to 0 to clean them out&quot;
+        print &quot;We will start a thread to do the cleaning, while we stop it later&quot;
+
+        LIMIT = 0
+        t = threading.Thread(target=clean_sessions, args=(conn,))
+        t.setDaemon(1) # to make sure it dies if we ctrl+C quit
+        t.start()
+        time.sleep(1)
+        QUIT = True
+        time.sleep(2)
+        if t.isAlive():
+            raise Exception(&quot;The clean sessions thread is still alive?!?&quot;)
+
+        s = conn.hlen(&#39;login:&#39;)
+        print &quot;The current number of sessions still available is:&quot;, s
+        self.assertFalse(s)
+
+    def test_shoppping_cart_cookies(self):
+        conn = self.conn
+        global LIMIT, QUIT
+        token = str(uuid.uuid4())
+
+        print &quot;We&#39;ll refresh our session...&quot;
+        update_token(conn, token, &#39;username&#39;, &#39;itemX&#39;)
+        print &quot;And add an item to the shopping cart&quot;
+        add_to_cart(conn, token, &quot;itemY&quot;, 3)
+        r = conn.hgetall(&#39;cart:&#39; + token)
+        print &quot;Our shopping cart currently has:&quot;, r
+        print
+
+        self.assertTrue(len(r) &gt;= 1)
+
+        print &quot;Let&#39;s clean out our sessions and carts&quot;
+        LIMIT = 0
+        t = threading.Thread(target=clean_full_sessions, args=(conn,))
+        t.setDaemon(1) # to make sure it dies if we ctrl+C quit
+        t.start()
+        time.sleep(1)
+        QUIT = True
+        time.sleep(2)
+        if t.isAlive():
+            raise Exception(&quot;The clean sessions thread is still alive?!?&quot;)
+
+        r = conn.hgetall(&#39;cart:&#39; + token)
+        print &quot;Our shopping cart now contains:&quot;, r
+
+        self.assertFalse(r)
+
+    def test_cache_request(self):
+        conn = self.conn
+        token = str(uuid.uuid4())
+
+        def callback(request):
+            return &quot;content for &quot; + request
+
+        update_token(conn, token, &#39;username&#39;, &#39;itemX&#39;)
+        url = &#39;http://test.com/?item=itemX&#39;
+        print &quot;We are going to cache a simple request against&quot;, url
+        result = cache_request(conn, url, callback)
+        print &quot;We got initial content:&quot;, repr(result)
+        print
+
+        self.assertTrue(result)
+
+        print &quot;To test that we&#39;ve cached the request, we&#39;ll pass a bad callback&quot;
+        result2 = cache_request(conn, url, None)
+        print &quot;We ended up getting the same response!&quot;, repr(result2)
+
+        self.assertEquals(result, result2)
+
+        self.assertFalse(can_cache(conn, &#39;http://test.com/&#39;))
+        self.assertFalse(can_cache(conn, &#39;http://test.com/?item=itemX&amp;_=1234536&#39;))
+
+    def test_cache_rows(self):
+        import pprint
+        conn = self.conn
+        global QUIT
         
-        <span class="k">print</span> <span class="s">&quot;First, let&#39;s schedule caching of itemX every 5 seconds&quot;</span>
-        <span class="n">schedule_row_cache</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;itemX&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Our schedule looks like:&quot;</span>
-        <span class="n">s</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrange</span><span class="p">(</span><span class="s">&#39;schedule:&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">withscores</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+        print &quot;First, let&#39;s schedule caching of itemX every 5 seconds&quot;
+        schedule_row_cache(conn, &#39;itemX&#39;, 5)
+        print &quot;Our schedule looks like:&quot;
+        s = conn.zrange(&#39;schedule:&#39;, 0, -1, withscores=True)
+        pprint.pprint(s)
+        self.assertTrue(s)
 
-        <span class="k">print</span> <span class="s">&quot;We&#39;ll start a caching thread that will cache the data...&quot;</span>
-        <span class="n">t</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">cache_rows</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">conn</span><span class="p">,))</span>
-        <span class="n">t</span><span class="o">.</span><span class="n">setDaemon</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">t</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        print &quot;We&#39;ll start a caching thread that will cache the data...&quot;
+        t = threading.Thread(target=cache_rows, args=(conn,))
+        t.setDaemon(1)
+        t.start()
 
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Our cached data looks like:&quot;</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;inv:itemX&#39;</span><span class="p">)</span>
-        <span class="k">print</span> <span class="nb">repr</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
-        <span class="k">print</span>
-        <span class="k">print</span> <span class="s">&quot;We&#39;ll check again in 5 seconds...&quot;</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;Notice that the data has changed...&quot;</span>
-        <span class="n">r2</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;inv:itemX&#39;</span><span class="p">)</span>
-        <span class="k">print</span> <span class="nb">repr</span><span class="p">(</span><span class="n">r2</span><span class="p">)</span>
-        <span class="k">print</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r2</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertTrue</span><span class="p">(</span><span class="n">r</span> <span class="o">!=</span> <span class="n">r2</span><span class="p">)</span>
+        time.sleep(1)
+        print &quot;Our cached data looks like:&quot;
+        r = conn.get(&#39;inv:itemX&#39;)
+        print repr(r)
+        self.assertTrue(r)
+        print
+        print &quot;We&#39;ll check again in 5 seconds...&quot;
+        time.sleep(5)
+        print &quot;Notice that the data has changed...&quot;
+        r2 = conn.get(&#39;inv:itemX&#39;)
+        print repr(r2)
+        print
+        self.assertTrue(r2)
+        self.assertTrue(r != r2)
 
-        <span class="k">print</span> <span class="s">&quot;Let&#39;s force un-caching&quot;</span>
-        <span class="n">schedule_row_cache</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="s">&#39;itemX&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">r</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;inv:itemX&#39;</span><span class="p">)</span>
-        <span class="k">print</span> <span class="s">&quot;The cache was cleared?&quot;</span><span class="p">,</span> <span class="ow">not</span> <span class="n">r</span>
-        <span class="k">print</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertFalse</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        print &quot;Let&#39;s force un-caching&quot;
+        schedule_row_cache(conn, &#39;itemX&#39;, -1)
+        time.sleep(1)
+        r = conn.get(&#39;inv:itemX&#39;)
+        print &quot;The cache was cleared?&quot;, not r
+        print
+        self.assertFalse(r)
 
-        <span class="n">QUIT</span> <span class="o">=</span> <span class="bp">True</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">isAlive</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&quot;The database caching thread is still alive?!?&quot;</span><span class="p">)</span>
+        QUIT = True
+        time.sleep(2)
+        if t.isAlive():
+            raise Exception(&quot;The database caching thread is still alive?!?&quot;)
 
-    <span class="c"># We aren&#39;t going to bother with the top 10k requests are cached, as</span>
-    <span class="c"># we already tested it as part of the cached requests test.</span>
+    # We aren&#39;t going to bother with the top 10k requests are cached, as
+    # we already tested it as part of the cached requests test.
 
-<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
-    <span class="n">unittest</span><span class="o">.</span><span class="n">main</span><span class="p">()</span>
+if __name__ == &#39;__main__&#39;:
+    unittest.main()
 </pre></div>
 </div>
 </div>
