@@ -33,7 +33,8 @@ Redis实战
 `异步社区 <http://www.epubit.com.cn/book/details/4035>`_ 、
 `京东 <http://item.jd.com/11791607.html>`_ 、
 `亚马逊 <http://www.amazon.cn/Redis%E5%AE%9E%E6%88%98-%E7%BE%8E-%E7%BA%A6%E8%A5%BF%E4%BA%9A-L-%E5%8D%A1%E5%B0%94%E6%A3%AE/dp/B016YLS2LM>`_ 、
-`互动出版网 <http://product.china-pub.com/4881439>`_
+`互动出版网 <http://product.china-pub.com/4881439>`_ 、
+`当当 <http://product.dangdang.com/23800641.html>`_ 
 
 除了以上网店销售的标准版本之外，
 本书的译者还提供了《Redis实战》译者签名版可供选购，
