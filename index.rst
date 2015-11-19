@@ -248,18 +248,21 @@ Redis 的作者 Salvatore Sanfilippo 亲自为《Redis实战》撰写了序言�
 相关资源
 -----------
 
-在线阅读《Redis in Action》原版：
+《Redis实战》用例目录，这篇文章逐一罗列了书中给出的各个 Redis 应用示例，以及这些示例的源码，方便读者参考： 
+http://blog.huangz.me/diary/2015/redis-usages-in-ria.html
+
+在线阅读《Redis实战》英文原版《Redis in Action》：
 https://redislabs.com/academy/redis-in-action
 
 《Redis in Action》在 Manning 出版社的介绍页面：
 https://www.manning.com/books/redis-in-action
 
-《Redis实战》的豆瓣页面：
-http://book.douban.com/subject/26612779/
-
-《Redis in Action》翻译记事，
+《Redis实战》翻译记事，
 这篇文章记录了《Redis实战》的诞生过程：
 http://blog.huangz.me/diary/2015/memories-of-redis-in-action-translation.html
+
+《Redis实战》的豆瓣页面：
+http://book.douban.com/subject/26612779/
 
 
 勘误信息
