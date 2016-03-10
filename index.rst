@@ -161,21 +161,18 @@ Redis实战
 译者将这些源代码的注释都翻译成了中文，
 你可以在以下页面中在线阅读这些源代码：
 
-.. toctree::
-   :maxdepth: 1
-
-   code-preview/chapter1.rst
-   code-preview/chapter2.rst
-   code-preview/chapter3.rst
-   code-preview/chapter4.rst
-   code-preview/chapter5.rst
-   code-preview/chapter6.rst
-   code-preview/chapter7.rst
-   code-preview/chapter8.rst
-   code-preview/chapter9.rst
-   code-preview/chapter10.rst
-   code-preview/chapter11.rst
-   code-preview/appendx-a.rst
+- `第 1 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch01_listing_source.py>`_
+- `第 2 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch02_listing_source.py>`_
+- `第 3 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch03_listing_source.py>`_
+- `第 4 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch04_listing_source.py>`_
+- `第 5 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch05_listing_source.py>`_
+- `第 6 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch06_listing_source.py>`_
+- `第 7 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch07_listing_source.py>`_
+- `第 8 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch08_listing_source.py>`_
+- `第 9 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch09_listing_source.py>`_
+- `第 10 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch10_listing_source.py>`_
+- `第 11 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch11_listing_source.py>`_
+- `附录 A 相关源码 <https://github.com/huangz1990/riacn-code/blob/master/chA_listing_source.py>`_
 
 又或者到 https://github.com/huangz1990/riacn-code 下载这些源代码。
 
