@@ -36,13 +36,8 @@ Redis实战
 `互动出版网 <http://product.china-pub.com/4881439>`_ 、
 `当当 <http://product.dangdang.com/23800641.html>`_ 
 
-除了以上网店销售的标准版本之外，
-本书的译者还提供了《Redis实战》译者签名版可供选购，
-详情请见：:doc:`buy-signed-version` 。
-
-*因为版权原因，
-《Redis实战》的电子书出版时间将晚于纸质书，
-想要第一时间看到书本内容的读者可以优先考虑购买纸质书。*
+购买电子书请访问以下网店：
+`异步社区 <http://www.epubit.com.cn/book/details/4035>`_ 。
 
 查看目录并试读
 -------------------
