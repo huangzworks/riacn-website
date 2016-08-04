@@ -37,7 +37,8 @@ Redis实战
 `当当 <http://product.dangdang.com/23800641.html>`_ 
 
 购买电子书请访问以下网店：
-`异步社区 <http://www.epubit.com.cn/book/details/4035>`_ 。
+`异步社区 <http://www.epubit.com.cn/book/details/4035>`_ 、
+`亚马逊 Kindle 版本 <https://www.amazon.cn/gp/product/B01IV39S0K>`_ 。
 
 查看目录并试读
 -------------------
