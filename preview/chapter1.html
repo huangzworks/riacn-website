@@ -23,6 +23,9 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
     <link rel="top" title="Redis 实战" href="../index.html" />
     <link rel="next" title="第2章 使用Redis构建Web应用" href="chapter2.html" />
     <link rel="prev" title="关于封面插图" href="about-the-cover.html" /> 
@@ -61,28 +64,28 @@
 <h1>第1章  初识Redis<a class="headerlink" href="#redis" title="Permalink to this headline">¶</a></h1>
 <p>本章涵盖：</p>
 <ul class="simple">
-<li>Redis与其他软件的相同之处和不同之处</li>
-<li>Redis的用法</li>
-<li>使用Python示例代码与Redis进行简单的互动</li>
-<li>使用Redis解决实际问题</li>
+<li><p>Redis与其他软件的相同之处和不同之处</p></li>
+<li><p>Redis的用法</p></li>
+<li><p>使用Python示例代码与Redis进行简单的互动</p></li>
+<li><p>使用Redis解决实际问题</p></li>
 </ul>
 <p>Redis是一个远程内存数据库，它不仅性能强劲，而且还具有复制特性以及为解决问题而生的独一无二的数据模型。Redis提供了五种不同类型的数据结构，各式各样的问题都可以很自然地映射到这些数据结构上：Redis的数据结构致力于帮助用户解决问题，而不会像其他数据库那样，要求用户扭曲问题来适应数据库。除此之外，通过复制、持久化（persistence）和客户端分片（client-side sharding）等特性，用户可以很方便地将Redis扩展成一个能够包含数百GB数据、每秒钟处理上百万次请求的系统。</p>
 <p>我第一次使用Redis是在一家公司里面，这家公司需要对一个客户联系方式数据库进行搜索。搜索需要查找姓名、电子邮件地址、所在地和电话号码。这个系统是用SQL数据库编写的，在60 000个客户中进行查找匹配的一系列查询需要花费10~15秒的时间。在花了一周时间学习Redis的基础知识之后，我使用Redis构建了一个搜索引擎，能够对所有那些字段甚至更多字段进行过滤和排序，并且在50毫秒内返回响应。经过短短几个星期的努力测试，就使这个系统达到了生产级别，性能比原来的系统提高了200倍。阅读本书可以让你学到很多小技巧、小窍门以及一些众所周知的Redis曾经成功解决过的问题。</p>
 <p>本章将介绍Redis的适用范围，以及在不同环境中使用Redis的方法（比如怎样跟不同的组件和编程语言进行通信等等）；而之后的章节则会展示各式各样的问题，以及使用Redis来解决这些问题的方法。</p>
 <p>现在你已经知道我是怎样开始使用Redis的了，也知道了这本书大概要讲些什么内容了，是时候更详细地介绍一下Redis，并说明为什么应该使用Redis了。</p>
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>安装Redis和Python</p>
-<p class="last">附录A介绍了快速安装Redis和Python的方法。</p>
+<p>附录A介绍了快速安装Redis和Python的方法。</p>
 </div>
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>在其他编程语言里面使用Redis</p>
-<p class="last">本书只展示了使用Python语言编写的示例代码，使用Ruby、Java和JavaScript（Node.js）编写的示例代码可以在这里找到：<a class="reference external" href="https://github.com/josiahcarlson/redis-in-action">https://github.com/josiahcarlson/redis-in-action</a>。使用Spring框架的读者可以通过查看<a class="reference external" href="http://www.springsource.org/spring-data/redis">http://www.springsource.org/spring-data/redis</a>来学习如何在Spring框架中使用Redis。</p>
+<p>本书只展示了使用Python语言编写的示例代码，使用Ruby、Java和JavaScript（Node.js）编写的示例代码可以在这里找到：<a class="reference external" href="https://github.com/josiahcarlson/redis-in-action">https://github.com/josiahcarlson/redis-in-action</a>。使用Spring框架的读者可以通过查看<a class="reference external" href="http://www.springsource.org/spring-data/redis">http://www.springsource.org/spring-data/redis</a>来学习如何在Spring框架中使用Redis。</p>
 </div>
 <div class="section" id="id1">
 <h2>1.1  Redis简介<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
-<p>前面对于 Redis 数据库的描述只说出了一部分真相。Redis是一个速度非常快的非关系数据库（non-relational database），它可以存储键（key）与5种不同类型的值（value）之间的映射（mapping），可以将存储在内存的键值对数据持久化到硬盘，可以使用复制特性来扩展读性能，还可以使用客户端分片<a class="footnote-reference" href="#f1" id="id2">[1]</a>来扩展写性能，接下来的几节将分别介绍Redis的这几个特性。</p>
+<p>前面对于 Redis 数据库的描述只说出了一部分真相。Redis是一个速度非常快的非关系数据库（non-relational database），它可以存储键（key）与5种不同类型的值（value）之间的映射（mapping），可以将存储在内存的键值对数据持久化到硬盘，可以使用复制特性来扩展读性能，还可以使用客户端分片<a class="footnote-reference brackets" href="#f1" id="id2">1</a>来扩展写性能，接下来的几节将分别介绍Redis的这几个特性。</p>
 <div class="section" id="id3">
 <h3>1.1.1  Redis与其他数据库和软件的对比<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h3>
 <p>如果你熟悉关系数据库，那么你肯定写过用来关联两个表的数据的SQL查询。而Redis则属于人们常说的<em>NoSQL</em>数据库或者<em>非关系</em>数据库：Redis不使用表，它的数据库也没有预定义或者强制的方式来要求用户关联Redis存储的不同数据。</p>
@@ -91,71 +94,71 @@
 <p>表1-1展示了一部分在功能上与Redis有重叠的数据库服务器和缓存服务器，从这个表可以看出Redis与这些数据库及软件之间的区别。</p>
 <hr class="docutils" />
 <p>表1-1  一些数据库和缓存服务器的特性与功能</p>
-<table border="1" class="docutils">
+<table class="docutils align-center">
 <colgroup>
-<col width="6%" />
-<col width="22%" />
-<col width="19%" />
-<col width="33%" />
-<col width="21%" />
+<col style="width: 6%" />
+<col style="width: 22%" />
+<col style="width: 19%" />
+<col style="width: 33%" />
+<col style="width: 21%" />
 </colgroup>
-<thead valign="bottom">
-<tr class="row-odd"><th class="head">名称</th>
-<th class="head">类型</th>
-<th class="head">数据存储选项</th>
-<th class="head">查询类型</th>
-<th class="head">附加功能</th>
+<thead>
+<tr class="row-odd"><th class="head"><p>名称</p></th>
+<th class="head"><p>类型</p></th>
+<th class="head"><p>数据存储选项</p></th>
+<th class="head"><p>查询类型</p></th>
+<th class="head"><p>附加功能</p></th>
 </tr>
 </thead>
-<tbody valign="top">
-<tr class="row-even"><td>Redis</td>
-<td>使用内存存储（in-memory） 的非关系数据库</td>
-<td>字符串、列表、集合、散列表、有序集合</td>
-<td>每种数据类型都有自己的专属命令，
-另外还有批量操作（bulk operation）和不完全（partial）的事务支持</td>
-<td>发布与订阅，
+<tbody>
+<tr class="row-even"><td><p>Redis</p></td>
+<td><p>使用内存存储（in-memory） 的非关系数据库</p></td>
+<td><p>字符串、列表、集合、散列表、有序集合</p></td>
+<td><p>每种数据类型都有自己的专属命令，
+另外还有批量操作（bulk operation）和不完全（partial）的事务支持</p></td>
+<td><p>发布与订阅，
 主从复制（master/slave replication），
 持久化，
-脚本（存储过程，stored procedure）</td>
+脚本（存储过程，stored procedure）</p></td>
 </tr>
-<tr class="row-odd"><td>memcached</td>
-<td>使用内存存储的键值缓存</td>
-<td>键值之间的映射</td>
-<td>创建命令、读取命令、更新命令、删除命令以及其他几个命令</td>
-<td>为提升性能而设的多线程服务器</td>
+<tr class="row-odd"><td><p>memcached</p></td>
+<td><p>使用内存存储的键值缓存</p></td>
+<td><p>键值之间的映射</p></td>
+<td><p>创建命令、读取命令、更新命令、删除命令以及其他几个命令</p></td>
+<td><p>为提升性能而设的多线程服务器</p></td>
 </tr>
-<tr class="row-even"><td>MySQL</td>
-<td>关系数据库</td>
-<td>每个数据库可以包含多个表，
+<tr class="row-even"><td><p>MySQL</p></td>
+<td><p>关系数据库</p></td>
+<td><p>每个数据库可以包含多个表，
 每个表可以包含多个行；
 可以处理多个表的视图（view）；
-支持空间（spatial）和第三方扩展</td>
-<td><code class="docutils literal"><span class="pre">SELECT</span></code> 、 <code class="docutils literal"><span class="pre">INSERT</span></code> 、 <code class="docutils literal"><span class="pre">UPDATE</span></code> 、 <code class="docutils literal"><span class="pre">DELETE</span></code>
-、函数、存储过程</td>
-<td>支持ACID性质（需要使用InnoDB），
+支持空间（spatial）和第三方扩展</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SELECT</span></code> 、 <code class="docutils literal notranslate"><span class="pre">INSERT</span></code> 、 <code class="docutils literal notranslate"><span class="pre">UPDATE</span></code> 、 <code class="docutils literal notranslate"><span class="pre">DELETE</span></code>
+、函数、存储过程</p></td>
+<td><p>支持ACID性质（需要使用InnoDB），
 主从复制和主主复制
-（master/master replication）</td>
+（master/master replication）</p></td>
 </tr>
-<tr class="row-odd"><td>PostgreSQL</td>
-<td>关系数据库</td>
-<td>每个数据库可以包含多个表，
+<tr class="row-odd"><td><p>PostgreSQL</p></td>
+<td><p>关系数据库</p></td>
+<td><p>每个数据库可以包含多个表，
 每个表可以包含多个行；
 可以处理多个表的视图；
-支持空间和第三方扩展；支持可定制类型</td>
-<td><code class="docutils literal"><span class="pre">SELECT</span></code> 、 <code class="docutils literal"><span class="pre">INSERT</span></code> 、 <code class="docutils literal"><span class="pre">UPDATE</span></code> 、 <code class="docutils literal"><span class="pre">DELETE</span></code>
-、内置函数、自定义的存储过程</td>
-<td>支持ACID性质，主从复制，
+支持空间和第三方扩展；支持可定制类型</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SELECT</span></code> 、 <code class="docutils literal notranslate"><span class="pre">INSERT</span></code> 、 <code class="docutils literal notranslate"><span class="pre">UPDATE</span></code> 、 <code class="docutils literal notranslate"><span class="pre">DELETE</span></code>
+、内置函数、自定义的存储过程</p></td>
+<td><p>支持ACID性质，主从复制，
 由第三方支持的多主复制
-（multi-master replication）</td>
+（multi-master replication）</p></td>
 </tr>
-<tr class="row-even"><td>MongoDB</td>
-<td>使用硬盘存储（on-disk）的非关系文档存储</td>
-<td>每个数据库可以包含多个表，
+<tr class="row-even"><td><p>MongoDB</p></td>
+<td><p>使用硬盘存储（on-disk）的非关系文档存储</p></td>
+<td><p>每个数据库可以包含多个表，
 每个表可以包含多个无schema
-（schema-less）的BSON文档</td>
-<td>创建命令、读取命令、更新命令、删除命令、条件查询命令，等等</td>
-<td>支持map-reduce操作，主从复制，分片，
-空间索引（spatial index）</td>
+（schema-less）的BSON文档</p></td>
+<td><p>创建命令、读取命令、更新命令、删除命令、条件查询命令，等等</p></td>
+<td><p>支持map-reduce操作，主从复制，分片，
+空间索引（spatial index）</p></td>
 </tr>
 </tbody>
 </table>
@@ -168,9 +171,9 @@
 </div>
 <div class="section" id="id5">
 <h3>1.1.3  使用Redis的理由<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h3>
-<p>有memcached使用经验的读者可能知道，用户只能用<code class="docutils literal"><span class="pre">APPEND</span></code>命令将数据添加到已有字符串的末尾。memcached的文档中声明，可以用<code class="docutils literal"><span class="pre">APPEND</span></code>命令来管理元素列表。这很好！用户可以将元素追加到一个字符串的末尾，并将那个字符串当作列表来使用。但随后如何删除这些元素呢？memcached采用的办法是采用黑名单（blacklist）来隐藏列表里面的元素，从而避免对元素执行读取、更新、写入（或者数据库请求和memcached写入）等操作。相反地，Redis的<code class="docutils literal"><span class="pre">LIST</span></code>和<code class="docutils literal"><span class="pre">SET</span></code>允许用户直接添加或者删除元素。</p>
+<p>有memcached使用经验的读者可能知道，用户只能用<code class="docutils literal notranslate"><span class="pre">APPEND</span></code>命令将数据添加到已有字符串的末尾。memcached的文档中声明，可以用<code class="docutils literal notranslate"><span class="pre">APPEND</span></code>命令来管理元素列表。这很好！用户可以将元素追加到一个字符串的末尾，并将那个字符串当作列表来使用。但随后如何删除这些元素呢？memcached采用的办法是采用黑名单（blacklist）来隐藏列表里面的元素，从而避免对元素执行读取、更新、写入（或者数据库请求和memcached写入）等操作。相反地，Redis的<code class="docutils literal notranslate"><span class="pre">LIST</span></code>和<code class="docutils literal notranslate"><span class="pre">SET</span></code>允许用户直接添加或者删除元素。</p>
 <p>使用Redis代替memcached可以解决这个问题以及其他问题，不仅可以让代码变得更简短、更易懂、更易维护，而且还可以使代码的运行速度更快（因为用户不需要通过读取数据库来更新数据）。除此之外，在其他许多情况下，Redis的效率和易用性也比关系数据库要好得多。</p>
-<p>数据库的一个常见用法是存储长期的报告数据，并将这些报告数据用作固定时间范围内的聚合数据（aggregates）。收集聚合数据的常见做法是：先将各个行插入到一个报告表里面，之后再通过扫描这些行来收集聚合数据，并根据收集到的聚合数据来更新聚合表中已有的那些行。之所以使用插入行的方式来存储，是因为对于大部分数据库来说，插入行操作的执行速度非常快（插入行只会在磁盘文件末尾进行写入）。不过，对表里面的行进行更新却是一个速度相当慢的操作，因为这种更新除了会引起一次随机读（random read）之外，还可能会引起一次随机写（random write）。而在Redis里面，用户可以直接使用原子的（atomic）<code class="docutils literal"><span class="pre">INCR</span></code>命令及其变种来计算聚合数据，并且因为Redis将数据存储在内存里面<a class="footnote-reference" href="#f2" id="id6">[2]</a>，而且发送给Redis的命令请求并不需要经过典型的查询分析器（parser）或者查询优化器（optimizer）进行处理，所以对Redis存储的数据执行随机写的速度总是非常快。</p>
+<p>数据库的一个常见用法是存储长期的报告数据，并将这些报告数据用作固定时间范围内的聚合数据（aggregates）。收集聚合数据的常见做法是：先将各个行插入到一个报告表里面，之后再通过扫描这些行来收集聚合数据，并根据收集到的聚合数据来更新聚合表中已有的那些行。之所以使用插入行的方式来存储，是因为对于大部分数据库来说，插入行操作的执行速度非常快（插入行只会在磁盘文件末尾进行写入）。不过，对表里面的行进行更新却是一个速度相当慢的操作，因为这种更新除了会引起一次随机读（random read）之外，还可能会引起一次随机写（random write）。而在Redis里面，用户可以直接使用原子的（atomic）<code class="docutils literal notranslate"><span class="pre">INCR</span></code>命令及其变种来计算聚合数据，并且因为Redis将数据存储在内存里面<a class="footnote-reference brackets" href="#f2" id="id6">2</a>，而且发送给Redis的命令请求并不需要经过典型的查询分析器（parser）或者查询优化器（optimizer）进行处理，所以对Redis存储的数据执行随机写的速度总是非常快。</p>
 <p>使用Redis而不是关系数据库或者其他磁盘存储数据库，可以避免写入不必要的临时数据，也免去了对临时数据进行扫描或者删除的麻烦，并最终改善程序的性能。虽然上面列举的都是一些简单的例子，但它们很好地证明了“工具会极大地改变人们解决问题的方式”这一点。</p>
 <p>除了第6章提到的任务队列（task queue）之外，本书的大部分内容都致力于实时地解决问题。本书通过展示各种技术并提供可工作的代码来帮助读者消灭瓶颈、简化代码、收集数据、分发（distribute）数据、构建实用程序（utility），并最终帮助读者更轻松地完成构建软件的任务。只要正确地使用书中介绍的技术，读者的软件就可以扩展至令那些所谓的“Web扩展技术（web-sacle technology）”相形见拙的地步。</p>
 <p>在了解了Redis是什么、它能做什么以及我们为什么要使用它之后，是时候来实际地使用一下它了。接下来的一节将对Redis提供的数据结构进行介绍，说明这些数据结构的作用，并展示一部分操作这些数据结构的命令。</p>
@@ -178,102 +181,102 @@
 </div>
 <div class="section" id="id7">
 <h2>1.2  Redis数据结构简介<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
-<p>正如之前的表1-1所示，Redis可以存储键与5种不同数据结构类型之间的映射，这5种数据结构类型分别为<code class="docutils literal"><span class="pre">STRING</span></code>（字符串）、<code class="docutils literal"><span class="pre">LIST</span></code>（列表）、<code class="docutils literal"><span class="pre">SET</span></code>（集合）、<code class="docutils literal"><span class="pre">HASH</span></code>（散列）和<code class="docutils literal"><span class="pre">ZSET</span></code>（有序集合）。有一部分Redis命令对于这5种结构都是通用的：比如<code class="docutils literal"><span class="pre">DEL</span></code>、<code class="docutils literal"><span class="pre">TYPE</span></code>、<code class="docutils literal"><span class="pre">RENAME</span></code>等等；但也有一部分Redis命令只能对特定的一种或者两种结构使用，第3章将对Redis提供的命令进行更深入的介绍。</p>
-<p>大部分程序员应该都不会对Redis的<code class="docutils literal"><span class="pre">STRING</span></code>、<code class="docutils literal"><span class="pre">LIST</span></code>、<code class="docutils literal"><span class="pre">HASH</span></code>这3种结构感到陌生，因为它们和很多编程语言内建的字符串、列表和散列等结构在实现和语义（semantics）方面都非常相似。有些编程语言还有集合数据结构，在实现和语义上类似于Redis的<code class="docutils literal"><span class="pre">SET</span></code>。<code class="docutils literal"><span class="pre">ZSET</span></code>在某种程度上是一种Redis特有的结构，但是当你熟悉了它之后，就会发现它也是一种非常有用的结构。表1-2对比了Redis提供的5种结构，说明了这些结构存储的值，并简单介绍了它们的语义。</p>
+<p>正如之前的表1-1所示，Redis可以存储键与5种不同数据结构类型之间的映射，这5种数据结构类型分别为<code class="docutils literal notranslate"><span class="pre">STRING</span></code>（字符串）、<code class="docutils literal notranslate"><span class="pre">LIST</span></code>（列表）、<code class="docutils literal notranslate"><span class="pre">SET</span></code>（集合）、<code class="docutils literal notranslate"><span class="pre">HASH</span></code>（散列）和<code class="docutils literal notranslate"><span class="pre">ZSET</span></code>（有序集合）。有一部分Redis命令对于这5种结构都是通用的：比如<code class="docutils literal notranslate"><span class="pre">DEL</span></code>、<code class="docutils literal notranslate"><span class="pre">TYPE</span></code>、<code class="docutils literal notranslate"><span class="pre">RENAME</span></code>等等；但也有一部分Redis命令只能对特定的一种或者两种结构使用，第3章将对Redis提供的命令进行更深入的介绍。</p>
+<p>大部分程序员应该都不会对Redis的<code class="docutils literal notranslate"><span class="pre">STRING</span></code>、<code class="docutils literal notranslate"><span class="pre">LIST</span></code>、<code class="docutils literal notranslate"><span class="pre">HASH</span></code>这3种结构感到陌生，因为它们和很多编程语言内建的字符串、列表和散列等结构在实现和语义（semantics）方面都非常相似。有些编程语言还有集合数据结构，在实现和语义上类似于Redis的<code class="docutils literal notranslate"><span class="pre">SET</span></code>。<code class="docutils literal notranslate"><span class="pre">ZSET</span></code>在某种程度上是一种Redis特有的结构，但是当你熟悉了它之后，就会发现它也是一种非常有用的结构。表1-2对比了Redis提供的5种结构，说明了这些结构存储的值，并简单介绍了它们的语义。</p>
 <hr class="docutils" />
 <p>表1-2  Redis提供的5种结构</p>
-<table border="1" class="docutils">
+<table class="docutils align-center">
 <colgroup>
-<col width="13%" />
-<col width="49%" />
-<col width="37%" />
+<col style="width: 13%" />
+<col style="width: 49%" />
+<col style="width: 37%" />
 </colgroup>
-<thead valign="bottom">
-<tr class="row-odd"><th class="head">结构类型</th>
-<th class="head">结构存储的值</th>
-<th class="head">结构的读写能力</th>
+<thead>
+<tr class="row-odd"><th class="head"><p>结构类型</p></th>
+<th class="head"><p>结构存储的值</p></th>
+<th class="head"><p>结构的读写能力</p></th>
 </tr>
 </thead>
-<tbody valign="top">
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">STRING</span></code></td>
-<td>可以是字符串、整数或者浮点数</td>
-<td>对整个字符串或者字符串的其中一部分执行操作；
-对整数和浮点数执行自增（increment）或者自减（decrement）操作</td>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">STRING</span></code></p></td>
+<td><p>可以是字符串、整数或者浮点数</p></td>
+<td><p>对整个字符串或者字符串的其中一部分执行操作；
+对整数和浮点数执行自增（increment）或者自减（decrement）操作</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">LIST</span></code></td>
-<td>一个链表，链表上的每个节点都包含了一个字符串</td>
-<td>从链表的两端推入或者弹出元素；根据偏移量对链表进行修剪（trim）；
-读取单个或者多个元素；根据值查找或者移除元素</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">LIST</span></code></p></td>
+<td><p>一个链表，链表上的每个节点都包含了一个字符串</p></td>
+<td><p>从链表的两端推入或者弹出元素；根据偏移量对链表进行修剪（trim）；
+读取单个或者多个元素；根据值查找或者移除元素</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">SET</span></code></td>
-<td>包含字符串的无序收集器（unordered collection），并且被包含的每个字符串都是独一无二、各不相同的</td>
-<td>添加、获取、移除单个元素；检查一个元素是否存在于集合中；
-计算交集、并集、差集；从集合里面随机获取元素</td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SET</span></code></p></td>
+<td><p>包含字符串的无序收集器（unordered collection），并且被包含的每个字符串都是独一无二、各不相同的</p></td>
+<td><p>添加、获取、移除单个元素；检查一个元素是否存在于集合中；
+计算交集、并集、差集；从集合里面随机获取元素</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">HASH</span></code></td>
-<td>包含键值对的无序散列表</td>
-<td>添加、获取、移除单个键值对；获取所有键值对</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HASH</span></code></p></td>
+<td><p>包含键值对的无序散列表</p></td>
+<td><p>添加、获取、移除单个键值对；获取所有键值对</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">ZSET</span></code> （有序集合）</td>
-<td>字符串成员（member）与浮点数分值（score）之间的有序映射，元素的排列顺序由分值的大小决定</td>
-<td>添加、获取、删除单个元素；根据分值范围（range）或者成员来获取元素</td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ZSET</span></code> （有序集合）</p></td>
+<td><p>字符串成员（member）与浮点数分值（score）之间的有序映射，元素的排列顺序由分值的大小决定</p></td>
+<td><p>添加、获取、删除单个元素；根据分值范围（range）或者成员来获取元素</p></td>
 </tr>
 </tbody>
 </table>
 <hr class="docutils" />
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>命令列表</p>
-<p class="last">本节在介绍每个数据类型的时候，都会在一个表格里面展示一小部分处理这些数据结构的命令，之后的第3章会展示一个更详细（但仍不完整）的命令列表，完整的Redis命令列表可以在<a class="reference external" href="http://redis.io/commands">http://redis.io/commands</a>找到。</p>
+<p>本节在介绍每个数据类型的时候，都会在一个表格里面展示一小部分处理这些数据结构的命令，之后的第3章会展示一个更详细（但仍不完整）的命令列表，完整的Redis命令列表可以在<a class="reference external" href="http://redis.io/commands">http://redis.io/commands</a>找到。</p>
 </div>
 <p>这一节将介绍如何表示Redis的这5种结构，并且还会介绍Redis命令的使用方法，从而为本书的后续内容打好基础。本书展示的所有示例代码都是用Python写的，如果读者已经按照附录A里面描述的方法安装好了Redis，那么应该也已经安装好了Python，以及在Python里面使用Redis所需的客户端库。只要读者在电脑里面安装了Redis、Python和redis-py库，就可以在阅读本书的同时，尝试执行书中展示的示例代码了。</p>
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>请安装Redis和Python</p>
-<p class="last">在阅读后续内容之前，请读者先按照附录A中介绍的方法安装Redis和Python。如果读者觉得附录A描述的安装方法过于复杂，那么这里有一个更简单的方法，但这个方法只能用于Debian系统（或者该系统的衍生系统）：从<a class="reference external" href="http://redis.io/download">http://redis.io/download</a>下载Redis的压缩包，解压压缩包，执行<code class="docutils literal"><span class="pre">make</span> <span class="pre">&amp;&amp;</span> <span class="pre">sudo</span> <span class="pre">make</span> <span class="pre">install</span></code>， 之后再执行<code class="docutils literal"><span class="pre">sudo</span> <span class="pre">python</span> <span class="pre">-m</span> <span class="pre">easy_install</span> <span class="pre">redis</span> <span class="pre">hiredis</span></code>（<em>hiredis</em>是可选的，它是一个使用C语言编写的高性能Redis客户端）。</p>
+<p>在阅读后续内容之前，请读者先按照附录A中介绍的方法安装Redis和Python。如果读者觉得附录A描述的安装方法过于复杂，那么这里有一个更简单的方法，但这个方法只能用于Debian系统（或者该系统的衍生系统）：从<a class="reference external" href="http://redis.io/download">http://redis.io/download</a>下载Redis的压缩包，解压压缩包，执行<code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">&amp;&amp;</span> <span class="pre">sudo</span> <span class="pre">make</span> <span class="pre">install</span></code>， 之后再执行<code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">python</span> <span class="pre">-m</span> <span class="pre">easy_install</span> <span class="pre">redis</span> <span class="pre">hiredis</span></code>（<em>hiredis</em>是可选的，它是一个使用C语言编写的高性能Redis客户端）。</p>
 </div>
 <p>如果读者熟悉过程式编程语言或者面向对象编程语言，那么即使没有使用过Python，应该也可以看懂Python代码。另一方面，如果读者决定使用其他编程语言来操作Redis，那么就需要自己来将本书的Python代码翻译成正在使用的语言的代码。</p>
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>使用其他语言编写的示例代码</p>
-<p class="last">尽管没有包含在书中，但本书展示的Python示例代码已经被翻译成了Ruby代码、Java代码和JavaScript代码，这些翻译代码可以在<a class="reference external" href="https://github.com/josiahcarlson/redis-in-action">https://github.com/josiahcarlson/redis-in-action</a>下载到。跟Python编写的示例代码一样，这些翻译代码也包含相应的注释，方便读者参考。</p>
+<p>尽管没有包含在书中，但本书展示的Python示例代码已经被翻译成了Ruby代码、Java代码和JavaScript代码，这些翻译代码可以在<a class="reference external" href="https://github.com/josiahcarlson/redis-in-action">https://github.com/josiahcarlson/redis-in-action</a>下载到。跟Python编写的示例代码一样，这些翻译代码也包含相应的注释，方便读者参考。</p>
 </div>
-<p>为了让示例代码尽可能地简单，本书会尽量避免使用Python的高级特性，并使用函数而不是类或者其他东西来执行Redis操作，以此来将焦点放在使用Redis解决问题上面，而不必过多地关注Python的语法。本节将使用redis-cli控制台与Redis进行互动。首先，让我们来了解一下Redis中最简单的结构：<code class="docutils literal"><span class="pre">STRING</span></code>。</p>
+<p>为了让示例代码尽可能地简单，本书会尽量避免使用Python的高级特性，并使用函数而不是类或者其他东西来执行Redis操作，以此来将焦点放在使用Redis解决问题上面，而不必过多地关注Python的语法。本节将使用redis-cli控制台与Redis进行互动。首先，让我们来了解一下Redis中最简单的结构：<code class="docutils literal notranslate"><span class="pre">STRING</span></code>。</p>
 <div class="section" id="id8">
 <h3>1.2.1  Redis中的字符串<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h3>
-<p>Redis的<code class="docutils literal"><span class="pre">STRING</span></code>和其他编程语言或者其他键值存储提供的字符串非常相似。本书在使用图片表示键和值的时候，通常会将键名（key name）和值的类型放在方框的顶部，将值放在方框的里面。图1-1以键为<code class="docutils literal"><span class="pre">hello</span></code>、值为<code class="docutils literal"><span class="pre">world</span></code>的<code class="docutils literal"><span class="pre">STRING</span></code>为例，分别标记了方框的各个部分。</p>
+<p>Redis的<code class="docutils literal notranslate"><span class="pre">STRING</span></code>和其他编程语言或者其他键值存储提供的字符串非常相似。本书在使用图片表示键和值的时候，通常会将键名（key name）和值的类型放在方框的顶部，将值放在方框的里面。图1-1以键为<code class="docutils literal notranslate"><span class="pre">hello</span></code>、值为<code class="docutils literal notranslate"><span class="pre">world</span></code>的<code class="docutils literal notranslate"><span class="pre">STRING</span></code>为例，分别标记了方框的各个部分。</p>
 <hr class="docutils" />
 <img alt="../_images/1-1.png" src="../_images/1-1.png" />
-<p>图1-1  一个<code class="docutils literal"><span class="pre">STRING</span></code>示例，键为<code class="docutils literal"><span class="pre">hello</span></code>，值为<code class="docutils literal"><span class="pre">world</span></code></p>
+<p>图1-1  一个<code class="docutils literal notranslate"><span class="pre">STRING</span></code>示例，键为<code class="docutils literal notranslate"><span class="pre">hello</span></code>，值为<code class="docutils literal notranslate"><span class="pre">world</span></code></p>
 <hr class="docutils" />
-<p><code class="docutils literal"><span class="pre">STRING</span></code>拥有一些和其他键值存储相似的命令，比如<code class="docutils literal"><span class="pre">GET</span></code>（获得值）、<code class="docutils literal"><span class="pre">SET</span></code>（设置值）和<code class="docutils literal"><span class="pre">DEL</span></code>（删除值）。如果读者已经按照附录A的方法安装测试了Redis，那么可以根据代码清单1-1展示的例子，尝试使用redis-cli执行<code class="docutils literal"><span class="pre">SET</span></code>、<code class="docutils literal"><span class="pre">GET</span></code>和<code class="docutils literal"><span class="pre">DEL</span></code>，表1-3描述了这三个命令的基本用法。</p>
+<p><code class="docutils literal notranslate"><span class="pre">STRING</span></code>拥有一些和其他键值存储相似的命令，比如<code class="docutils literal notranslate"><span class="pre">GET</span></code>（获得值）、<code class="docutils literal notranslate"><span class="pre">SET</span></code>（设置值）和<code class="docutils literal notranslate"><span class="pre">DEL</span></code>（删除值）。如果读者已经按照附录A的方法安装测试了Redis，那么可以根据代码清单1-1展示的例子，尝试使用redis-cli执行<code class="docutils literal notranslate"><span class="pre">SET</span></code>、<code class="docutils literal notranslate"><span class="pre">GET</span></code>和<code class="docutils literal notranslate"><span class="pre">DEL</span></code>，表1-3描述了这三个命令的基本用法。</p>
 <hr class="docutils" />
 <p>表1-3  字符串命令</p>
-<table border="1" class="docutils">
+<table class="docutils align-center">
 <colgroup>
-<col width="17%" />
-<col width="83%" />
+<col style="width: 17%" />
+<col style="width: 83%" />
 </colgroup>
-<thead valign="bottom">
-<tr class="row-odd"><th class="head">命令</th>
-<th class="head">行为</th>
+<thead>
+<tr class="row-odd"><th class="head"><p>命令</p></th>
+<th class="head"><p>行为</p></th>
 </tr>
 </thead>
-<tbody valign="top">
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">GET</span></code></td>
-<td>获取存储在给定键中的值</td>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">GET</span></code></p></td>
+<td><p>获取存储在给定键中的值</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">SET</span></code></td>
-<td>设置存储在给定键中的值</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SET</span></code></p></td>
+<td><p>设置存储在给定键中的值</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">DEL</span></code></td>
-<td>删除存储在给定键中的值（这个命令可以用于所有类型）</td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DEL</span></code></p></td>
+<td><p>删除存储在给定键中的值（这个命令可以用于所有类型）</p></td>
 </tr>
 </tbody>
 </table>
 <hr class="docutils" />
-<p>代码清单1-1  <code class="docutils literal"><span class="pre">SET</span></code>、<code class="docutils literal"><span class="pre">GET</span></code>和<code class="docutils literal"><span class="pre">DEL</span></code>的使用示例</p>
-<div class="highlight-python"><div class="highlight"><pre>$ redis-cli                                 # 启动redis-cli 客户端
+<p>代码清单1-1  <code class="docutils literal notranslate"><span class="pre">SET</span></code>、<code class="docutils literal notranslate"><span class="pre">GET</span></code>和<code class="docutils literal notranslate"><span class="pre">DEL</span></code>的使用示例</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ redis-cli                                 # 启动redis-cli 客户端
 redis 127.0.0.1:6379&gt; set hello world       # 将键 hello 的值设置为 world 。
 OK                                          # SET 命令在执行成功时返回 OK ，Python 客户端会将这个 OK 转换成 True
 redis 127.0.0.1:6379&gt; get hello             # 获取储存在键 hello 中的值。
@@ -287,67 +290,67 @@ redis 127.0.0.1:6379&gt;
 </div>
 <hr class="docutils" />
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>使用redis-cli</p>
-<p class="last">为了让读者在一开始就能便捷地与Redis进行交互，本章将使用<em>redis-cli</em>这个交互式客户端来介绍Redis命令。</p>
+<p>为了让读者在一开始就能便捷地与Redis进行交互，本章将使用<em>redis-cli</em>这个交互式客户端来介绍Redis命令。</p>
 </div>
-<p>除了能够<code class="docutils literal"><span class="pre">GET</span></code>、<code class="docutils literal"><span class="pre">SET</span></code>和<code class="docutils literal"><span class="pre">DEL</span></code>字符串值之外，还有一些可以对字符串的其中一部分内容进行读取和写入的命令，以及一些能对字符串存储的数值执行自增或者自减操作的命令。第3章将对这些命令进行介绍，但是在此之前，我们还有许多基础知识需要了解，下面来看一下Redis的列表及其功能。</p>
+<p>除了能够<code class="docutils literal notranslate"><span class="pre">GET</span></code>、<code class="docutils literal notranslate"><span class="pre">SET</span></code>和<code class="docutils literal notranslate"><span class="pre">DEL</span></code>字符串值之外，还有一些可以对字符串的其中一部分内容进行读取和写入的命令，以及一些能对字符串存储的数值执行自增或者自减操作的命令。第3章将对这些命令进行介绍，但是在此之前，我们还有许多基础知识需要了解，下面来看一下Redis的列表及其功能。</p>
 </div>
 <div class="section" id="id9">
 <h3>1.2.2  Redis中的列表<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h3>
 <p>Redis对链表（linked-list）结构的支持使得它在键值存储的世界中独树一帜。一个列表结构可以有序地存储多个字符串，和表示字符串时使用的方法一样，本节使用带有标签的方框来表示列表，并将列表包含的元素放在方框里面。图1-2展示了一个这样的示例。</p>
 <hr class="docutils" />
 <img alt="../_images/1-2.png" src="../_images/1-2.png" />
-<p>图1-2  <code class="docutils literal"><span class="pre">list-key</span></code>是一个包含三个元素的列表键，注意列表里面的元素是可以重复的</p>
+<p>图1-2  <code class="docutils literal notranslate"><span class="pre">list-key</span></code>是一个包含三个元素的列表键，注意列表里面的元素是可以重复的</p>
 <hr class="docutils" />
-<p>Redis列表可执行的操作和很多编程语言里面的列表操作非常相似：<code class="docutils literal"><span class="pre">LPUSH</span></code>命令和<code class="docutils literal"><span class="pre">RPUSH</span></code>命令分别用于将元素推入到列表的左端（left end）和右端（right end）；<code class="docutils literal"><span class="pre">LPOP</span></code>命令和<code class="docutils literal"><span class="pre">RPOP</span></code>命令分别用于从列表的左端和右端弹出元素；<code class="docutils literal"><span class="pre">LINDEX</span></code>命令用于获取列表在给定位置上的一个元素；<code class="docutils literal"><span class="pre">LRANGE</span></code>命令用于获取列表在给定范围上的所有元素。代码清单1-2展示了一些列表命令的使用示例，表1-4简单介绍了示例中用到的各个命令。</p>
+<p>Redis列表可执行的操作和很多编程语言里面的列表操作非常相似：<code class="docutils literal notranslate"><span class="pre">LPUSH</span></code>命令和<code class="docutils literal notranslate"><span class="pre">RPUSH</span></code>命令分别用于将元素推入到列表的左端（left end）和右端（right end）；<code class="docutils literal notranslate"><span class="pre">LPOP</span></code>命令和<code class="docutils literal notranslate"><span class="pre">RPOP</span></code>命令分别用于从列表的左端和右端弹出元素；<code class="docutils literal notranslate"><span class="pre">LINDEX</span></code>命令用于获取列表在给定位置上的一个元素；<code class="docutils literal notranslate"><span class="pre">LRANGE</span></code>命令用于获取列表在给定范围上的所有元素。代码清单1-2展示了一些列表命令的使用示例，表1-4简单介绍了示例中用到的各个命令。</p>
 <hr class="docutils" />
 <p>表1-4  列表命令</p>
-<table border="1" class="docutils">
+<table class="docutils align-center">
 <colgroup>
-<col width="26%" />
-<col width="74%" />
+<col style="width: 26%" />
+<col style="width: 74%" />
 </colgroup>
-<thead valign="bottom">
-<tr class="row-odd"><th class="head">命令</th>
-<th class="head">行为</th>
+<thead>
+<tr class="row-odd"><th class="head"><p>命令</p></th>
+<th class="head"><p>行为</p></th>
 </tr>
 </thead>
-<tbody valign="top">
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">RPUSH</span></code></td>
-<td>将给定值推入到列表的右端</td>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RPUSH</span></code></p></td>
+<td><p>将给定值推入到列表的右端</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">LRANGE</span></code></td>
-<td>获取列表在给定范围上的所有值</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">LRANGE</span></code></p></td>
+<td><p>获取列表在给定范围上的所有值</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">LINDEX</span></code></td>
-<td>获取列表在给定位置上的单个元素</td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">LINDEX</span></code></p></td>
+<td><p>获取列表在给定位置上的单个元素</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">LPOP</span></code></td>
-<td>从列表的左端弹出一个值，并返回被弹出的值</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">LPOP</span></code></p></td>
+<td><p>从列表的左端弹出一个值，并返回被弹出的值</p></td>
 </tr>
 </tbody>
 </table>
 <hr class="docutils" />
-<p>代码清单1-2  <code class="docutils literal"><span class="pre">RPUSH</span></code>、<code class="docutils literal"><span class="pre">LRANGE</span></code>、<code class="docutils literal"><span class="pre">LINDEX</span></code>和<code class="docutils literal"><span class="pre">LPOP</span></code>的使用示例</p>
-<div class="highlight-python"><div class="highlight"><pre>redis 127.0.0.1:6379&gt; rpush list-key item   # 在向列表推入新元素之后，该命令会返回列表的当前长度。
-(integer) 1                                 #
-redis 127.0.0.1:6379&gt; rpush list-key item2  #
-(integer) 2                                 #
-redis 127.0.0.1:6379&gt; rpush list-key item   #
-(integer) 3                                 #
-redis 127.0.0.1:6379&gt; lrange list-key 0 -1  # 使用0为范围的起始索引，-1为范围的结束索引，
-1) &quot;item&quot;                                   # 可以取出列表包含的所有元素。
-2) &quot;item2&quot;                                  #
-3) &quot;item&quot;                                   #
-redis 127.0.0.1:6379&gt; lindex list-key 1     # 使用LINDEX可以从列表里面取出单个元素。
-&quot;item2&quot;                                     #
-redis 127.0.0.1:6379&gt; lpop list-key         # 从列表里面弹出一个元素，被弹出的元素不再存在于列表。
-&quot;item&quot;                                      #
-redis 127.0.0.1:6379&gt; lrange list-key 0 -1  #
-1) &quot;item2&quot;                                  #
-2) &quot;item&quot;                                   #
-redis 127.0.0.1:6379&gt;
+<p>代码清单1-2  <code class="docutils literal notranslate"><span class="pre">RPUSH</span></code>、<code class="docutils literal notranslate"><span class="pre">LRANGE</span></code>、<code class="docutils literal notranslate"><span class="pre">LINDEX</span></code>和<code class="docutils literal notranslate"><span class="pre">LPOP</span></code>的使用示例</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">rpush</span> <span class="nb">list</span><span class="o">-</span><span class="n">key</span> <span class="n">item</span>   <span class="c1"># 在向列表推入新元素之后，该命令会返回列表的当前长度。</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                 <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">rpush</span> <span class="nb">list</span><span class="o">-</span><span class="n">key</span> <span class="n">item2</span>  <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">2</span>                                 <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">rpush</span> <span class="nb">list</span><span class="o">-</span><span class="n">key</span> <span class="n">item</span>   <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">3</span>                                 <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">lrange</span> <span class="nb">list</span><span class="o">-</span><span class="n">key</span> <span class="mi">0</span> <span class="o">-</span><span class="mi">1</span>  <span class="c1"># 使用0为范围的起始索引，-1为范围的结束索引，</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;item&quot;</span>                                   <span class="c1"># 可以取出列表包含的所有元素。</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;item2&quot;</span>                                  <span class="c1">#</span>
+<span class="mi">3</span><span class="p">)</span> <span class="s2">&quot;item&quot;</span>                                   <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">lindex</span> <span class="nb">list</span><span class="o">-</span><span class="n">key</span> <span class="mi">1</span>     <span class="c1"># 使用LINDEX可以从列表里面取出单个元素。</span>
+<span class="s2">&quot;item2&quot;</span>                                     <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">lpop</span> <span class="nb">list</span><span class="o">-</span><span class="n">key</span>         <span class="c1"># 从列表里面弹出一个元素，被弹出的元素不再存在于列表。</span>
+<span class="s2">&quot;item&quot;</span>                                      <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">lrange</span> <span class="nb">list</span><span class="o">-</span><span class="n">key</span> <span class="mi">0</span> <span class="o">-</span><span class="mi">1</span>  <span class="c1">#</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;item2&quot;</span>                                  <span class="c1">#</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;item&quot;</span>                                   <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span>
 </pre></div>
 </div>
 <hr class="docutils" />
@@ -358,124 +361,124 @@ redis 127.0.0.1:6379&gt;
 <p>Redis的集合和列表都可以存储多个字符串，它们之间的不同在于，列表可以存储多个相同的字符串，而集合则通过使用散列表来保证自己存储的每个字符串都是各不相同的（这些散列表只有键，但没有与键相关联的值）。本书表示集合的方法和表示列表的方法基本相同，图1-3展示了一个包含三个元素的示例集合。</p>
 <hr class="docutils" />
 <img alt="../_images/1-3.png" src="../_images/1-3.png" />
-<p>图1-3  <code class="docutils literal"><span class="pre">set-key</span></code>是一个包含三个元素的集合键</p>
+<p>图1-3  <code class="docutils literal notranslate"><span class="pre">set-key</span></code>是一个包含三个元素的集合键</p>
 <hr class="docutils" />
-<p>因为Redis的集合使用无序（unordered）方式存储元素，所以用户不能像使用列表那样，将元素推入到集合的某一端，或者从集合的某一端弹出元素。不过用户可以使用<code class="docutils literal"><span class="pre">SADD</span></code>命令将元素添加到集合，或者使用<code class="docutils literal"><span class="pre">SRAM</span></code>命令从集合里面移除元素。另外，还使用<code class="docutils literal"><span class="pre">SISMEMBER</span></code>命令快速地检查一个元素是否已经存在于集合中，或者使用<code class="docutils literal"><span class="pre">SMEMBERS</span></code>命令获取集合包含的所有元素（如果集合包含的元素非常多，那么<code class="docutils literal"><span class="pre">SMEMBERS</span></code>命令的执行速度可能会很慢，所以请谨慎地使用这个命令）。代码清单1-3展示了一些集合命令的使用示例，表1-5简单介绍了代码清单里面用到的各个命令。</p>
+<p>因为Redis的集合使用无序（unordered）方式存储元素，所以用户不能像使用列表那样，将元素推入到集合的某一端，或者从集合的某一端弹出元素。不过用户可以使用<code class="docutils literal notranslate"><span class="pre">SADD</span></code>命令将元素添加到集合，或者使用<code class="docutils literal notranslate"><span class="pre">SRAM</span></code>命令从集合里面移除元素。另外，还使用<code class="docutils literal notranslate"><span class="pre">SISMEMBER</span></code>命令快速地检查一个元素是否已经存在于集合中，或者使用<code class="docutils literal notranslate"><span class="pre">SMEMBERS</span></code>命令获取集合包含的所有元素（如果集合包含的元素非常多，那么<code class="docutils literal notranslate"><span class="pre">SMEMBERS</span></code>命令的执行速度可能会很慢，所以请谨慎地使用这个命令）。代码清单1-3展示了一些集合命令的使用示例，表1-5简单介绍了代码清单里面用到的各个命令。</p>
 <hr class="docutils" />
 <p>表1-5  集合命令</p>
-<table border="1" class="docutils">
+<table class="docutils align-center">
 <colgroup>
-<col width="24%" />
-<col width="76%" />
+<col style="width: 24%" />
+<col style="width: 76%" />
 </colgroup>
-<thead valign="bottom">
-<tr class="row-odd"><th class="head">命令</th>
-<th class="head">行为</th>
+<thead>
+<tr class="row-odd"><th class="head"><p>命令</p></th>
+<th class="head"><p>行为</p></th>
 </tr>
 </thead>
-<tbody valign="top">
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">SADD</span></code></td>
-<td>将给定元素添加到集合</td>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SADD</span></code></p></td>
+<td><p>将给定元素添加到集合</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">SMEMBERS</span></code></td>
-<td>返回集合包含的所有元素</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SMEMBERS</span></code></p></td>
+<td><p>返回集合包含的所有元素</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">SISMEMBER</span></code></td>
-<td>检查给定元素是否存在于集合中</td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">SISMEMBER</span></code></p></td>
+<td><p>检查给定元素是否存在于集合中</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">SREM</span></code></td>
-<td>如果给定的元素存在于集合中，那么移除这个元素</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SREM</span></code></p></td>
+<td><p>如果给定的元素存在于集合中，那么移除这个元素</p></td>
 </tr>
 </tbody>
 </table>
 <hr class="docutils" />
-<p>代码清单1-3  <code class="docutils literal"><span class="pre">SADD</span></code>、<code class="docutils literal"><span class="pre">SMEMBERS</span></code>、<code class="docutils literal"><span class="pre">SISMEMBER</span></code>和<code class="docutils literal"><span class="pre">SREM</span></code>的使用示例</p>
-<div class="highlight-python"><div class="highlight"><pre>redis 127.0.0.1:6379&gt; sadd set-key item     # 在尝试将一个元素添加到集合的时候，
-(integer) 1                                 # 命令返回1表示这个元素被成功地添加到了集合里面，
-redis 127.0.0.1:6379&gt; sadd set-key item2    # 而返回0则表示这个元素已经存在于集合中。
-(integer) 1                                 #
-redis 127.0.0.1:6379&gt; sadd set-key item3    #
-(integer) 1                                 #
-redis 127.0.0.1:6379&gt; sadd set-key item     #
-(integer) 0                                 #
-redis 127.0.0.1:6379&gt; smembers set-key      # 获取集合包含的所有元素将得到一个由元素组成的序列，
-1) &quot;item&quot;                                   # Python客户端会将这个序列转换成Python集合。
-2) &quot;item2&quot;                                  #
-3) &quot;item3&quot;                                  #
-redis 127.0.0.1:6379&gt; sismember set-key item4   # 检查一个元素是否存在于集合中，
-(integer) 0                                     # Python客户端会返回一个布尔值来表示检查结果。
-redis 127.0.0.1:6379&gt; sismember set-key item    #
-(integer) 1                                     #
-redis 127.0.0.1:6379&gt; srem set-key item2    # 在使用命令移除集合中的元素时，命令会返回被移除的元素数量。
-(integer) 1                                 #
-redis 127.0.0.1:6379&gt; srem set-key item2    #
-(integer) 0                                 #
-redis 127.0.0.1:6379&gt;  smembers set-key
-1) &quot;item&quot;
-2) &quot;item3&quot;
-redis 127.0.0.1:6379&gt;
+<p>代码清单1-3  <code class="docutils literal notranslate"><span class="pre">SADD</span></code>、<code class="docutils literal notranslate"><span class="pre">SMEMBERS</span></code>、<code class="docutils literal notranslate"><span class="pre">SISMEMBER</span></code>和<code class="docutils literal notranslate"><span class="pre">SREM</span></code>的使用示例</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">sadd</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span> <span class="n">item</span>     <span class="c1"># 在尝试将一个元素添加到集合的时候，</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                 <span class="c1"># 命令返回1表示这个元素被成功地添加到了集合里面，</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">sadd</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span> <span class="n">item2</span>    <span class="c1"># 而返回0则表示这个元素已经存在于集合中。</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                 <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">sadd</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span> <span class="n">item3</span>    <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                 <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">sadd</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span> <span class="n">item</span>     <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>                                 <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">smembers</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span>      <span class="c1"># 获取集合包含的所有元素将得到一个由元素组成的序列，</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;item&quot;</span>                                   <span class="c1"># Python客户端会将这个序列转换成Python集合。</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;item2&quot;</span>                                  <span class="c1">#</span>
+<span class="mi">3</span><span class="p">)</span> <span class="s2">&quot;item3&quot;</span>                                  <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">sismember</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span> <span class="n">item4</span>   <span class="c1"># 检查一个元素是否存在于集合中，</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>                                     <span class="c1"># Python客户端会返回一个布尔值来表示检查结果。</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">sismember</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span> <span class="n">item</span>    <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                     <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">srem</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span> <span class="n">item2</span>    <span class="c1"># 在使用命令移除集合中的元素时，命令会返回被移除的元素数量。</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                 <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">srem</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span> <span class="n">item2</span>    <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>                                 <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span>  <span class="n">smembers</span> <span class="nb">set</span><span class="o">-</span><span class="n">key</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;item&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;item3&quot;</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span>
 </pre></div>
 </div>
 <hr class="docutils" />
-<p>跟字符串和列表不一样，集合除了基本的添加操作和移除操作之外，还支持很多其他操作，比如<code class="docutils literal"><span class="pre">SINTER</span></code>、<code class="docutils literal"><span class="pre">SUNION</span></code>、<code class="docutils literal"><span class="pre">SDIFF</span></code>三个命令就可以分别执行常见的交集计算、并集计算和差集计算。第3章将对集合的相关命令进行更详细的介绍，另外第7章还会展示如何使用集合来解决多个问题。不过别心急，因为在Redis提供的5种数据结构中，还有两种我们尚未了解，让我们先来看看Redis的散列。</p>
+<p>跟字符串和列表不一样，集合除了基本的添加操作和移除操作之外，还支持很多其他操作，比如<code class="docutils literal notranslate"><span class="pre">SINTER</span></code>、<code class="docutils literal notranslate"><span class="pre">SUNION</span></code>、<code class="docutils literal notranslate"><span class="pre">SDIFF</span></code>三个命令就可以分别执行常见的交集计算、并集计算和差集计算。第3章将对集合的相关命令进行更详细的介绍，另外第7章还会展示如何使用集合来解决多个问题。不过别心急，因为在Redis提供的5种数据结构中，还有两种我们尚未了解，让我们先来看看Redis的散列。</p>
 </div>
 <div class="section" id="id11">
 <h3>1.2.4  Redis的散列<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h3>
 <p>Redis的散列可以存储多个键值对之间的映射。和字符串一样，散列存储的值既可以是字符串又可以是数字值，并且用户同样可以对散列存储的数字值执行自增操作或者自减操作。图1-4展示了一个包含两个键值对的散列。</p>
 <hr class="docutils" />
 <img alt="../_images/1-4.png" src="../_images/1-4.png" />
-<p>图1-4 <code class="docutils literal"><span class="pre">hash-key</span></code>是一个包含两个键值对的散列键</p>
+<p>图1-4 <code class="docutils literal notranslate"><span class="pre">hash-key</span></code>是一个包含两个键值对的散列键</p>
 <hr class="docutils" />
 <p>散列在很多方面就像是一个微缩版的Redis，好几个字符串命令都有相应的散列版本。代码清单1-4展示了怎样对散列执行插入元素、获取元素和移除元素等操作，表1-6简单介绍了代码清单里面用到的各个命令。</p>
 <hr class="docutils" />
 <p>表1-6  散列命令</p>
-<table border="1" class="docutils">
+<table class="docutils align-center">
 <colgroup>
-<col width="26%" />
-<col width="74%" />
+<col style="width: 26%" />
+<col style="width: 74%" />
 </colgroup>
-<thead valign="bottom">
-<tr class="row-odd"><th class="head">命令</th>
-<th class="head">行为</th>
+<thead>
+<tr class="row-odd"><th class="head"><p>命令</p></th>
+<th class="head"><p>行为</p></th>
 </tr>
 </thead>
-<tbody valign="top">
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">HSET</span></code></td>
-<td>在散列里面关联起给定的键值对</td>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">HSET</span></code></p></td>
+<td><p>在散列里面关联起给定的键值对</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">HGET</span></code></td>
-<td>获取指定散列键的值</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HGET</span></code></p></td>
+<td><p>获取指定散列键的值</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">HGETALL</span></code></td>
-<td>获取散列包含的所有键值对</td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">HGETALL</span></code></p></td>
+<td><p>获取散列包含的所有键值对</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">HDEL</span></code></td>
-<td>如果给定键存在于散列里面，那么移除这个键</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">HDEL</span></code></p></td>
+<td><p>如果给定键存在于散列里面，那么移除这个键</p></td>
 </tr>
 </tbody>
 </table>
 <hr class="docutils" />
-<p>代码清单1-4  <code class="docutils literal"><span class="pre">HSET</span></code>、<code class="docutils literal"><span class="pre">HGET</span></code>、<code class="docutils literal"><span class="pre">HGETALL</span></code>和<code class="docutils literal"><span class="pre">HDEL</span></code>的使用示例</p>
-<div class="highlight-python"><div class="highlight"><pre>redis 127.0.0.1:6379&gt; hset hash-key sub-key1 value1 # 在尝试添加键值对到散列的时候，
-(integer) 1                                         # 命令会返回一个值来表示给定的键是否已经存在于散列里面。
-redis 127.0.0.1:6379&gt; hset hash-key sub-key2 value2 #
-(integer) 1                                         #
-redis 127.0.0.1:6379&gt; hset hash-key sub-key1 value1 #
-(integer) 0                                         #
-redis 127.0.0.1:6379&gt; hgetall hash-key              # 获取散列包含的所有键值对，
-1) &quot;sub-key1&quot;                                       # Python客户端会将这些键值对转换为Python字典。
-2) &quot;value1&quot;                                         #
-3) &quot;sub-key2&quot;                                       #
-4) &quot;value2&quot;                                         #
-redis 127.0.0.1:6379&gt; hdel hash-key sub-key2        # 在删除键值对的时候，
-(integer) 1                                         # 命令会返回一个值来表示给定的键在移除之前是否存在于散列里面。
-redis 127.0.0.1:6379&gt; hdel hash-key sub-key2        #
-(integer) 0                                         #
-redis 127.0.0.1:6379&gt; hget hash-key sub-key1        # 从散列里面单独取出一个域。
-&quot;value1&quot;                                            #
-redis 127.0.0.1:6379&gt; hgetall hash-key
-1) &quot;sub-key1&quot;
-2) &quot;value1&quot;
+<p>代码清单1-4  <code class="docutils literal notranslate"><span class="pre">HSET</span></code>、<code class="docutils literal notranslate"><span class="pre">HGET</span></code>、<code class="docutils literal notranslate"><span class="pre">HGETALL</span></code>和<code class="docutils literal notranslate"><span class="pre">HDEL</span></code>的使用示例</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">hset</span> <span class="nb">hash</span><span class="o">-</span><span class="n">key</span> <span class="n">sub</span><span class="o">-</span><span class="n">key1</span> <span class="n">value1</span> <span class="c1"># 在尝试添加键值对到散列的时候，</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                         <span class="c1"># 命令会返回一个值来表示给定的键是否已经存在于散列里面。</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">hset</span> <span class="nb">hash</span><span class="o">-</span><span class="n">key</span> <span class="n">sub</span><span class="o">-</span><span class="n">key2</span> <span class="n">value2</span> <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                         <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">hset</span> <span class="nb">hash</span><span class="o">-</span><span class="n">key</span> <span class="n">sub</span><span class="o">-</span><span class="n">key1</span> <span class="n">value1</span> <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>                                         <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">hgetall</span> <span class="nb">hash</span><span class="o">-</span><span class="n">key</span>              <span class="c1"># 获取散列包含的所有键值对，</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;sub-key1&quot;</span>                                       <span class="c1"># Python客户端会将这些键值对转换为Python字典。</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;value1&quot;</span>                                         <span class="c1">#</span>
+<span class="mi">3</span><span class="p">)</span> <span class="s2">&quot;sub-key2&quot;</span>                                       <span class="c1">#</span>
+<span class="mi">4</span><span class="p">)</span> <span class="s2">&quot;value2&quot;</span>                                         <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">hdel</span> <span class="nb">hash</span><span class="o">-</span><span class="n">key</span> <span class="n">sub</span><span class="o">-</span><span class="n">key2</span>        <span class="c1"># 在删除键值对的时候，</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                         <span class="c1"># 命令会返回一个值来表示给定的键在移除之前是否存在于散列里面。</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">hdel</span> <span class="nb">hash</span><span class="o">-</span><span class="n">key</span> <span class="n">sub</span><span class="o">-</span><span class="n">key2</span>        <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>                                         <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">hget</span> <span class="nb">hash</span><span class="o">-</span><span class="n">key</span> <span class="n">sub</span><span class="o">-</span><span class="n">key1</span>        <span class="c1"># 从散列里面单独取出一个域。</span>
+<span class="s2">&quot;value1&quot;</span>                                            <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">hgetall</span> <span class="nb">hash</span><span class="o">-</span><span class="n">key</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;sub-key1&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;value1&quot;</span>
 </pre></div>
 </div>
 <hr class="docutils" />
@@ -486,59 +489,59 @@ redis 127.0.0.1:6379&gt; hgetall hash-key
 <p>有序集合和散列一样，都用于存储键值对：其中有序集合的每个键称为<em>成员</em>（member），都是独一无二的，而有序集合的每个值称为<em>分值</em>（score），都必须是浮点数。有序集合是Redis里面唯一既可以根据成员访问元素（这一点和散列一样），又可以根据分值以及分值的排列顺序来访问元素的结构。图1-5展示了一个包含两个元素的有序集合示例。</p>
 <hr class="docutils" />
 <img alt="../_images/1-5.png" src="../_images/1-5.png" />
-<p>图 1-5  <code class="docutils literal"><span class="pre">zset-key</span></code>是一个包含两个元素的有序集合键</p>
+<p>图 1-5  <code class="docutils literal notranslate"><span class="pre">zset-key</span></code>是一个包含两个元素的有序集合键</p>
 <hr class="docutils" />
 <p>和Redis的其他结构一样，用户可以对有序集合执行添加、移除和获取等操作，代码清单1-5展示了这些操作的执行示例，表1-7简单介绍了代码清单里面用到的各个命令。</p>
 <hr class="docutils" />
 <p>表1-7  有序集合命令</p>
-<table border="1" class="docutils">
+<table class="docutils align-center">
 <colgroup>
-<col width="23%" />
-<col width="77%" />
+<col style="width: 23%" />
+<col style="width: 77%" />
 </colgroup>
-<thead valign="bottom">
-<tr class="row-odd"><th class="head">命令</th>
-<th class="head">行为</th>
+<thead>
+<tr class="row-odd"><th class="head"><p>命令</p></th>
+<th class="head"><p>行为</p></th>
 </tr>
 </thead>
-<tbody valign="top">
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">ZADD</span></code></td>
-<td>将一个带有给定分值的成员添加到有序集合里面</td>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ZADD</span></code></p></td>
+<td><p>将一个带有给定分值的成员添加到有序集合里面</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ZRANGE</span></code></td>
-<td>根据分值的排序顺序，获取有序集合在给定位置范围内的所有元素</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ZRANGE</span></code></p></td>
+<td><p>根据分值的排序顺序，获取有序集合在给定位置范围内的所有元素</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal"><span class="pre">ZRANGEBYSCORE</span></code></td>
-<td>获取有序集合在给定分值范围内的所有元素</td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ZRANGEBYSCORE</span></code></p></td>
+<td><p>获取有序集合在给定分值范围内的所有元素</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ZREM</span></code></td>
-<td>如果给定成员存在于有序集合，那么移除这个成员</td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ZREM</span></code></p></td>
+<td><p>如果给定成员存在于有序集合，那么移除这个成员</p></td>
 </tr>
 </tbody>
 </table>
 <hr class="docutils" />
-<p>代码清单1-5  <code class="docutils literal"><span class="pre">ZADD</span></code>、<code class="docutils literal"><span class="pre">ZRANGE</span></code>、<code class="docutils literal"><span class="pre">ZRANGEBYSCORE</span></code>和<code class="docutils literal"><span class="pre">ZREM</span></code>的使用示例</p>
-<div class="highlight-python"><div class="highlight"><pre>redis 127.0.0.1:6379&gt; zadd zset-key 728 member1     # 在尝试向有序集合添加元素的时候，
-(integer) 1                                         # 命令会返回新添加元素的数量。
-redis 127.0.0.1:6379&gt; zadd zset-key 982 member0     #
-(integer) 1                                         #
-redis 127.0.0.1:6379&gt; zadd zset-key 982 member0     #
-(integer) 0                                         #
-redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores   # 获取有序集合包含的所有元素，
-1) &quot;member1&quot;                                            # 这些元素会按照分值进行排序，
-2) &quot;728&quot;                                                # Python客户端会将这些分值转换成浮点数。
-3) &quot;member0&quot;                                            #
-4) &quot;982&quot;                                                #
-redis 127.0.0.1:6379&gt; zrangebyscore zset-key 0 800 withscores   # 也可以根据分值来获取有序集合的其中一部分元素。
-1) &quot;member1&quot;                                                    #
-2) &quot;728&quot;                                                        #
-redis 127.0.0.1:6379&gt; zrem zset-key member1     # 在移除有序集合元素的时候，
-(integer) 1                                     # 命令会返回被移除元素的数量。
-redis 127.0.0.1:6379&gt; zrem zset-key member1     #
-(integer) 0                                     #
-redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores
-1) &quot;member0&quot;
-2) &quot;982&quot;
+<p>代码清单1-5  <code class="docutils literal notranslate"><span class="pre">ZADD</span></code>、<code class="docutils literal notranslate"><span class="pre">ZRANGE</span></code>、<code class="docutils literal notranslate"><span class="pre">ZRANGEBYSCORE</span></code>和<code class="docutils literal notranslate"><span class="pre">ZREM</span></code>的使用示例</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">zadd</span> <span class="n">zset</span><span class="o">-</span><span class="n">key</span> <span class="mi">728</span> <span class="n">member1</span>     <span class="c1"># 在尝试向有序集合添加元素的时候，</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                         <span class="c1"># 命令会返回新添加元素的数量。</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">zadd</span> <span class="n">zset</span><span class="o">-</span><span class="n">key</span> <span class="mi">982</span> <span class="n">member0</span>     <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                         <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">zadd</span> <span class="n">zset</span><span class="o">-</span><span class="n">key</span> <span class="mi">982</span> <span class="n">member0</span>     <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>                                         <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">zrange</span> <span class="n">zset</span><span class="o">-</span><span class="n">key</span> <span class="mi">0</span> <span class="o">-</span><span class="mi">1</span> <span class="n">withscores</span>   <span class="c1"># 获取有序集合包含的所有元素，</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;member1&quot;</span>                                            <span class="c1"># 这些元素会按照分值进行排序，</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;728&quot;</span>                                                <span class="c1"># Python客户端会将这些分值转换成浮点数。</span>
+<span class="mi">3</span><span class="p">)</span> <span class="s2">&quot;member0&quot;</span>                                            <span class="c1">#</span>
+<span class="mi">4</span><span class="p">)</span> <span class="s2">&quot;982&quot;</span>                                                <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">zrangebyscore</span> <span class="n">zset</span><span class="o">-</span><span class="n">key</span> <span class="mi">0</span> <span class="mi">800</span> <span class="n">withscores</span>   <span class="c1"># 也可以根据分值来获取有序集合的其中一部分元素。</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;member1&quot;</span>                                                    <span class="c1">#</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;728&quot;</span>                                                        <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">zrem</span> <span class="n">zset</span><span class="o">-</span><span class="n">key</span> <span class="n">member1</span>     <span class="c1"># 在移除有序集合元素的时候，</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>                                     <span class="c1"># 命令会返回被移除元素的数量。</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">zrem</span> <span class="n">zset</span><span class="o">-</span><span class="n">key</span> <span class="n">member1</span>     <span class="c1">#</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>                                     <span class="c1">#</span>
+<span class="n">redis</span> <span class="mf">127.0</span><span class="o">.</span><span class="mf">0.1</span><span class="p">:</span><span class="mi">6379</span><span class="o">&gt;</span> <span class="n">zrange</span> <span class="n">zset</span><span class="o">-</span><span class="n">key</span> <span class="mi">0</span> <span class="o">-</span><span class="mi">1</span> <span class="n">withscores</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s2">&quot;member0&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s2">&quot;982&quot;</span>
 </pre></div>
 </div>
 <hr class="docutils" />
@@ -566,9 +569,9 @@ redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores
 <p>图1-8  一个使用散列存储文章信息的例子</p>
 <hr class="docutils" />
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>使用冒号作为分隔符</p>
-<p class="last">本书使用冒号（<code class="docutils literal"><span class="pre">:</span></code>）来分隔名字的不同部分：比如图1-8里面的键名<code class="docutils literal"><span class="pre">article:92617</span></code>就使用了冒号来分隔单词<code class="docutils literal"><span class="pre">article</span></code>和文章的ID号<code class="docutils literal"><span class="pre">92617</span></code>，以此来构建命名空间（namespace）。使用<code class="docutils literal"><span class="pre">:</span></code>作为分隔符只是我的个人喜好，不过大部分Redis用户也都是这么做的，另外还有一些常见的分隔符，如句号（<code class="docutils literal"><span class="pre">.</span></code>）、斜线（<code class="docutils literal"><span class="pre">/</span></code>），甚至还有用人用管道符号（<code class="docutils literal"><span class="pre">|</span></code>）。无论使用哪个符号来做分隔符，都要保持分隔符的一致性。同时，请读者注意观察和学习本书使用冒号创建嵌套命名空间的方法。</p>
+<p>本书使用冒号（<code class="docutils literal notranslate"><span class="pre">:</span></code>）来分隔名字的不同部分：比如图1-8里面的键名<code class="docutils literal notranslate"><span class="pre">article:92617</span></code>就使用了冒号来分隔单词<code class="docutils literal notranslate"><span class="pre">article</span></code>和文章的ID号<code class="docutils literal notranslate"><span class="pre">92617</span></code>，以此来构建命名空间（namespace）。使用<code class="docutils literal notranslate"><span class="pre">:</span></code>作为分隔符只是我的个人喜好，不过大部分Redis用户也都是这么做的，另外还有一些常见的分隔符，如句号（<code class="docutils literal notranslate"><span class="pre">.</span></code>）、斜线（<code class="docutils literal notranslate"><span class="pre">/</span></code>），甚至还有用人用管道符号（<code class="docutils literal notranslate"><span class="pre">|</span></code>）。无论使用哪个符号来做分隔符，都要保持分隔符的一致性。同时，请读者注意观察和学习本书使用冒号创建嵌套命名空间的方法。</p>
 </div>
 <p>网站使用了两个有序集合来有序地保存文章：第一个有序集合的成员为文章ID，分值为文章的发布时间；另一个有序集合的成员同样为文章ID，而分值则为文章的评分。通过这两个有序集合，网站既可以根据文章发布的先后顺序来展示文章，又可以根据文章评分的高低来展示文章，图1-9展示了这两个有序集合的一个示例。</p>
 <hr class="docutils" />
@@ -586,93 +589,93 @@ redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores
 <img alt="../_images/1-11.png" src="../_images/1-11.png" />
 <p>图1-11  当115423号用户给100408号文章投票的时候，数据结构发生的变化</p>
 <hr class="docutils" />
-<p>我们已经知道了网站计算文章评分的方法，也知道了网站存储数据所使用的数据结构，现在是时候来实现投票功能了！当用户尝试对一篇文章进行投票时，程序需要使用<code class="docutils literal"><span class="pre">ZSCORE</span></code>命令检查记录文章发布时间的有序集合，判断文章的发布时间是否未超过一周。如果文章仍然处于可以投票的时间范围之内，那么程序将使用<code class="docutils literal"><span class="pre">SADD</span></code>命令，尝试将用户添加到记录文章已投票用户名单的集合里面。如果添加操作执行成功的话，那么说明用户是第一次对这篇文章进行投票，程序将使用<code class="docutils literal"><span class="pre">ZINCRBY</span></code>命令（<code class="docutils literal"><span class="pre">ZINCRBY</span></code>用于对有序集合成员的分值执行自增操作）为文章的评分增加432分，并使用<code class="docutils literal"><span class="pre">HINCRBY</span></code>命令（<code class="docutils literal"><span class="pre">HINCRBY</span></code>用于对散列存储的值执行自增操作）对散列记录的文章投票数量进行更新，代码清单1-6展示了投票功能的实现代码。</p>
+<p>我们已经知道了网站计算文章评分的方法，也知道了网站存储数据所使用的数据结构，现在是时候来实现投票功能了！当用户尝试对一篇文章进行投票时，程序需要使用<code class="docutils literal notranslate"><span class="pre">ZSCORE</span></code>命令检查记录文章发布时间的有序集合，判断文章的发布时间是否未超过一周。如果文章仍然处于可以投票的时间范围之内，那么程序将使用<code class="docutils literal notranslate"><span class="pre">SADD</span></code>命令，尝试将用户添加到记录文章已投票用户名单的集合里面。如果添加操作执行成功的话，那么说明用户是第一次对这篇文章进行投票，程序将使用<code class="docutils literal notranslate"><span class="pre">ZINCRBY</span></code>命令（<code class="docutils literal notranslate"><span class="pre">ZINCRBY</span></code>用于对有序集合成员的分值执行自增操作）为文章的评分增加432分，并使用<code class="docutils literal notranslate"><span class="pre">HINCRBY</span></code>命令（<code class="docutils literal notranslate"><span class="pre">HINCRBY</span></code>用于对散列存储的值执行自增操作）对散列记录的文章投票数量进行更新，代码清单1-6展示了投票功能的实现代码。</p>
 <hr class="docutils" />
-<p>代码清单1-6  <code class="docutils literal"><span class="pre">article_vote()</span></code>函数</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="c"># 准备好需要用到的常量。</span>
+<p>代码清单1-6  <code class="docutils literal notranslate"><span class="pre">article_vote()</span></code>函数</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># 准备好需要用到的常量。</span>
 <span class="n">ONE_WEEK_IN_SECONDS</span> <span class="o">=</span> <span class="mi">7</span> <span class="o">*</span> <span class="mi">86400</span>
 <span class="n">VOTE_SCORE</span> <span class="o">=</span> <span class="mi">432</span>
 
 <span class="k">def</span> <span class="nf">article_vote</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">article</span><span class="p">):</span>
 
-    <span class="c"># 计算文章的投票截止时间。</span>
+    <span class="c1"># 计算文章的投票截止时间。</span>
     <span class="n">cutoff</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">ONE_WEEK_IN_SECONDS</span>
 
-    <span class="c"># 检查是否还可以对文章进行投票</span>
-    <span class="c">#（虽然使用散列也可以获取文章的发布时间，</span>
-    <span class="c"># 但有序集合返回的文章发布时间为浮点数，</span>
-    <span class="c"># 可以不进行转换直接使用）。</span>
-    <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s">&#39;time:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">cutoff</span><span class="p">:</span>
+    <span class="c1"># 检查是否还可以对文章进行投票</span>
+    <span class="c1">#（虽然使用散列也可以获取文章的发布时间，</span>
+    <span class="c1"># 但有序集合返回的文章发布时间为浮点数，</span>
+    <span class="c1"># 可以不进行转换直接使用）。</span>
+    <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">zscore</span><span class="p">(</span><span class="s1">&#39;time:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">cutoff</span><span class="p">:</span>
         <span class="k">return</span>
 
-    <span class="c"># 从article:id标识符（identifier）里面取出文章的ID。</span>
-    <span class="n">article_id</span> <span class="o">=</span> <span class="n">article</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="c1"># 从article:id标识符（identifier）里面取出文章的ID。</span>
+    <span class="n">article_id</span> <span class="o">=</span> <span class="n">article</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 
-    <span class="c"># 如果用户是第一次为这篇文章投票，那么增加这篇文章的投票数量和评分。</span>
-    <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;voted:&#39;</span> <span class="o">+</span> <span class="n">article_id</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="s">&#39;score:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">VOTE_SCORE</span><span class="p">)</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">article</span><span class="p">,</span> <span class="s">&#39;votes&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="c1"># 如果用户是第一次为这篇文章投票，那么增加这篇文章的投票数量和评分。</span>
+    <span class="k">if</span> <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s1">&#39;voted:&#39;</span> <span class="o">+</span> <span class="n">article_id</span><span class="p">,</span> <span class="n">user</span><span class="p">):</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">zincrby</span><span class="p">(</span><span class="s1">&#39;score:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">VOTE_SCORE</span><span class="p">)</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">hincrby</span><span class="p">(</span><span class="n">article</span><span class="p">,</span> <span class="s1">&#39;votes&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 </pre></div>
 </div>
 <hr class="docutils" />
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>Redis事务</p>
-<p class="last">从技术上来讲，要正确地实现投票功能，我们需要将代码清单1-6里面的<code class="docutils literal"><span class="pre">SADD</span></code>、<code class="docutils literal"><span class="pre">ZINCRBY</span></code>和<code class="docutils literal"><span class="pre">HINCRBY</span></code>三个命令放到一个事务里面执行，不过因为本书要等到第4章才介绍Redis事务，所以我们暂时忽略这个问题。</p>
+<p>从技术上来讲，要正确地实现投票功能，我们需要将代码清单1-6里面的<code class="docutils literal notranslate"><span class="pre">SADD</span></code>、<code class="docutils literal notranslate"><span class="pre">ZINCRBY</span></code>和<code class="docutils literal notranslate"><span class="pre">HINCRBY</span></code>三个命令放到一个事务里面执行，不过因为本书要等到第4章才介绍Redis事务，所以我们暂时忽略这个问题。</p>
 </div>
 <p>投票功能还是不错的，对吧？那么发布文章的功能要怎么实现呢？</p>
 </div>
 <div class="section" id="id15">
 <h3>1.3.2  发布并获取文章<a class="headerlink" href="#id15" title="Permalink to this headline">¶</a></h3>
-<p>发布一篇新文章首先需要创建一个新的文章ID，这项工作可以通过对一个计数器（counter）执行<code class="docutils literal"><span class="pre">INCR</span></code>命令来完成。接着程序需要使用<code class="docutils literal"><span class="pre">SADD</span></code>将文章发布者的ID添加到记录文章已投票用户名单的集合里面，并使用<code class="docutils literal"><span class="pre">EXPIRE</span></code>命令为这个集合设置一个过期时间，让Redis在文章发布期满一周之后自动删除这个集合。之后，程序会使用<code class="docutils literal"><span class="pre">HMSET</span></code>命令来存储文章的相关信息，并执行两个<code class="docutils literal"><span class="pre">ZADD</span></code>命令，将文章的初始评分（initial score）和发布时间分别添加到两个相应的有序集合里面。代码清单1-7展示了发布新文章功能的实现代码。</p>
+<p>发布一篇新文章首先需要创建一个新的文章ID，这项工作可以通过对一个计数器（counter）执行<code class="docutils literal notranslate"><span class="pre">INCR</span></code>命令来完成。接着程序需要使用<code class="docutils literal notranslate"><span class="pre">SADD</span></code>将文章发布者的ID添加到记录文章已投票用户名单的集合里面，并使用<code class="docutils literal notranslate"><span class="pre">EXPIRE</span></code>命令为这个集合设置一个过期时间，让Redis在文章发布期满一周之后自动删除这个集合。之后，程序会使用<code class="docutils literal notranslate"><span class="pre">HMSET</span></code>命令来存储文章的相关信息，并执行两个<code class="docutils literal notranslate"><span class="pre">ZADD</span></code>命令，将文章的初始评分（initial score）和发布时间分别添加到两个相应的有序集合里面。代码清单1-7展示了发布新文章功能的实现代码。</p>
 <hr class="docutils" />
-<p>代码清单1-7  <code class="docutils literal"><span class="pre">post_article()</span></code>函数</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">post_article</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">link</span><span class="p">):</span>
-    <span class="c"># 生成一个新的文章ID。</span>
-    <span class="n">article_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s">&#39;article:&#39;</span><span class="p">))</span>
+<p>代码清单1-7  <code class="docutils literal notranslate"><span class="pre">post_article()</span></code>函数</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">post_article</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">link</span><span class="p">):</span>
+    <span class="c1"># 生成一个新的文章ID。</span>
+    <span class="n">article_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">conn</span><span class="o">.</span><span class="n">incr</span><span class="p">(</span><span class="s1">&#39;article:&#39;</span><span class="p">))</span>
 
-    <span class="n">voted</span> <span class="o">=</span> <span class="s">&#39;voted:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
-    <span class="c"># 将发布文章的用户添加到文章的已投票用户名单里面，</span>
-    <span class="c"># 然后将这个名单的过期时间设置为一周（第3章将对过期时间作更详细的介绍）。</span>
+    <span class="n">voted</span> <span class="o">=</span> <span class="s1">&#39;voted:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
+    <span class="c1"># 将发布文章的用户添加到文章的已投票用户名单里面，</span>
+    <span class="c1"># 然后将这个名单的过期时间设置为一周（第3章将对过期时间作更详细的介绍）。</span>
     <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="n">voted</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
     <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">voted</span><span class="p">,</span> <span class="n">ONE_WEEK_IN_SECONDS</span><span class="p">)</span>
 
     <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-    <span class="n">article</span> <span class="o">=</span> <span class="s">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
-    <span class="c"># 将文章信息存储到一个散列里面。</span>
+    <span class="n">article</span> <span class="o">=</span> <span class="s1">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
+    <span class="c1"># 将文章信息存储到一个散列里面。</span>
     <span class="n">conn</span><span class="o">.</span><span class="n">hmset</span><span class="p">(</span><span class="n">article</span><span class="p">,</span> <span class="p">{</span>
-        <span class="s">&#39;title&#39;</span><span class="p">:</span> <span class="n">title</span><span class="p">,</span>
-        <span class="s">&#39;link&#39;</span><span class="p">:</span> <span class="n">link</span><span class="p">,</span>
-        <span class="s">&#39;poster&#39;</span><span class="p">:</span> <span class="n">user</span><span class="p">,</span>
-        <span class="s">&#39;time&#39;</span><span class="p">:</span> <span class="n">now</span><span class="p">,</span>
-        <span class="s">&#39;votes&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s1">&#39;title&#39;</span><span class="p">:</span> <span class="n">title</span><span class="p">,</span>
+        <span class="s1">&#39;link&#39;</span><span class="p">:</span> <span class="n">link</span><span class="p">,</span>
+        <span class="s1">&#39;poster&#39;</span><span class="p">:</span> <span class="n">user</span><span class="p">,</span>
+        <span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="n">now</span><span class="p">,</span>
+        <span class="s1">&#39;votes&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
     <span class="p">})</span>
 
-    <span class="c"># 将文章添加到根据发布时间排序的有序集合和根据评分排序的有序集合里面。</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;score:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">VOTE_SCORE</span><span class="p">)</span>
-    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s">&#39;time:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">now</span><span class="p">)</span>
+    <span class="c1"># 将文章添加到根据发布时间排序的有序集合和根据评分排序的有序集合里面。</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s1">&#39;score:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">now</span> <span class="o">+</span> <span class="n">VOTE_SCORE</span><span class="p">)</span>
+    <span class="n">conn</span><span class="o">.</span><span class="n">zadd</span><span class="p">(</span><span class="s1">&#39;time:&#39;</span><span class="p">,</span> <span class="n">article</span><span class="p">,</span> <span class="n">now</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">article_id</span>
 </pre></div>
 </div>
 <hr class="docutils" />
-<p>好了，我们已经陆续实现了文章投票功能和文章发布功能，接下来要考虑的就是如何取出评分最高的文章以及如何取出最新发布的文章了。为了实现这两个功能，程序需要先使用<code class="docutils literal"><span class="pre">ZREVRANGE</span></code>命令取出多个文章ID，然后再对每个文章ID执行一次<code class="docutils literal"><span class="pre">HGETALL</span></code>命令来取出文章的详细信息，这个方法既可以用于取出评分最高的文章，又可以用于取出最新发布的文章。这里特别要注意的一点是，因为有序集合会根据成员的分值从小到大地排列元素，所以使用<code class="docutils literal"><span class="pre">ZREVRANGE</span></code>命令来按照分值从大到小地取出文章ID才是正确的做法，代码清单1-8展示了文章获取功能的实现函数。</p>
+<p>好了，我们已经陆续实现了文章投票功能和文章发布功能，接下来要考虑的就是如何取出评分最高的文章以及如何取出最新发布的文章了。为了实现这两个功能，程序需要先使用<code class="docutils literal notranslate"><span class="pre">ZREVRANGE</span></code>命令取出多个文章ID，然后再对每个文章ID执行一次<code class="docutils literal notranslate"><span class="pre">HGETALL</span></code>命令来取出文章的详细信息，这个方法既可以用于取出评分最高的文章，又可以用于取出最新发布的文章。这里特别要注意的一点是，因为有序集合会根据成员的分值从小到大地排列元素，所以使用<code class="docutils literal notranslate"><span class="pre">ZREVRANGE</span></code>命令来按照分值从大到小地取出文章ID才是正确的做法，代码清单1-8展示了文章获取功能的实现函数。</p>
 <hr class="docutils" />
-<p>代码清单1-8  <code class="docutils literal"><span class="pre">get_articles()</span></code>函数</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="n">ARTICLES_PER_PAGE</span> <span class="o">=</span> <span class="mi">25</span>
+<p>代码清单1-8  <code class="docutils literal notranslate"><span class="pre">get_articles()</span></code>函数</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ARTICLES_PER_PAGE</span> <span class="o">=</span> <span class="mi">25</span>
 
-<span class="k">def</span> <span class="nf">get_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s">&#39;score:&#39;</span><span class="p">):</span>
-    <span class="c"># 设置获取文章的起始索引和结束索引。</span>
+<span class="k">def</span> <span class="nf">get_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;score:&#39;</span><span class="p">):</span>
+    <span class="c1"># 设置获取文章的起始索引和结束索引。</span>
     <span class="n">start</span> <span class="o">=</span> <span class="p">(</span><span class="n">page</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">ARTICLES_PER_PAGE</span>
     <span class="n">end</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">ARTICLES_PER_PAGE</span> <span class="o">-</span> <span class="mi">1</span>
 
-    <span class="c"># 获取多个文章ID。</span>
+    <span class="c1"># 获取多个文章ID。</span>
     <span class="n">ids</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">zrevrange</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>
     <span class="n">articles</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="c"># 根据文章ID获取文章的详细信息。</span>
+    <span class="c1"># 根据文章ID获取文章的详细信息。</span>
     <span class="k">for</span> <span class="nb">id</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">:</span>
         <span class="n">article_data</span> <span class="o">=</span> <span class="n">conn</span><span class="o">.</span><span class="n">hgetall</span><span class="p">(</span><span class="nb">id</span><span class="p">)</span>
-        <span class="n">article_data</span><span class="p">[</span><span class="s">&#39;id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">id</span>
+        <span class="n">article_data</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">id</span>
         <span class="n">articles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">article_data</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">articles</span>
@@ -680,9 +683,9 @@ redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores
 </div>
 <hr class="docutils" />
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>Python的默认值参数和关键字参数</p>
-<p class="last">代码清单1-8中的<code class="docutils literal"><span class="pre">get_articles()</span></code>函数为<code class="docutils literal"><span class="pre">order</span></code>参数设置了默认值<code class="docutils literal"><span class="pre">score:</span></code>。Python语言的初学者可能会对“默认值参数”以及“根据名字（而不是位置）来传入参数”的一些细节感到陌生。如果读者在理解函数定义或者参数传递方面有困难，那么可以参考Python入门指南，里面对这两个方面进行了很好的介绍，可以通过以下短地址直接跳到相应部分进行了解：<a class="reference external" href="http://mng.bz/KM5x">http://mng.bz/KM5x</a>。</p>
+<p>代码清单1-8中的<code class="docutils literal notranslate"><span class="pre">get_articles()</span></code>函数为<code class="docutils literal notranslate"><span class="pre">order</span></code>参数设置了默认值<code class="docutils literal notranslate"><span class="pre">score:</span></code>。Python语言的初学者可能会对“默认值参数”以及“根据名字（而不是位置）来传入参数”的一些细节感到陌生。如果读者在理解函数定义或者参数传递方面有困难，那么可以参考Python入门指南，里面对这两个方面进行了很好的介绍，可以通过以下短地址直接跳到相应部分进行了解：<a class="reference external" href="http://mng.bz/KM5x">http://mng.bz/KM5x</a>。</p>
 </div>
 <p>虽然我们构建的网站现在已经可以展示最新发布的文章和评分最高的文章了，但它还不具备目前很多投票网站都支持的群组（group）功能：这个功能可以让用户只看见与特定话题有关的文章，比如与“可爱的动物”有关的文章、与“政治”有关的文章、与“Java编程”有关的文章或者介绍“Redis用法”的文章等等。接下来的一节将向我们展示为文章投票网站添加群组功能的方法。</p>
 </div>
@@ -690,51 +693,51 @@ redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores
 <h3>1.3.3  对文章进行分组<a class="headerlink" href="#id16" title="Permalink to this headline">¶</a></h3>
 <p>群组功能由两个部分组成，一个部分负责记录文章属于哪个群组，另一个部分负责取出群组里面的文章。为了记录各个群组都保存了哪些文章，网站需要为每个群组创建一个集合，并将所有同属一个群组的文章ID都记录到这个集合里面。代码清单1-9展示了怎样将一篇文章添加到一个群组里面，以及如何从群组里面移除文章。</p>
 <hr class="docutils" />
-<p>代码清单1-9  <code class="docutils literal"><span class="pre">add_remove_groups()</span></code>函数</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">add_remove_groups</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">article_id</span><span class="p">,</span> <span class="n">to_add</span><span class="o">=</span><span class="p">[],</span> <span class="n">to_remove</span><span class="o">=</span><span class="p">[]):</span>
-    <span class="c"># 构建存储文章信息的键名。</span>
-    <span class="n">article</span> <span class="o">=</span> <span class="s">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
+<p>代码清单1-9  <code class="docutils literal notranslate"><span class="pre">add_remove_groups()</span></code>函数</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">add_remove_groups</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">article_id</span><span class="p">,</span> <span class="n">to_add</span><span class="o">=</span><span class="p">[],</span> <span class="n">to_remove</span><span class="o">=</span><span class="p">[]):</span>
+    <span class="c1"># 构建存储文章信息的键名。</span>
+    <span class="n">article</span> <span class="o">=</span> <span class="s1">&#39;article:&#39;</span> <span class="o">+</span> <span class="n">article_id</span>
     <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">to_add</span><span class="p">:</span>
-        <span class="c"># 将文章添加到它所属的群组里面。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span>
+        <span class="c1"># 将文章添加到它所属的群组里面。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">sadd</span><span class="p">(</span><span class="s1">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">to_remove</span><span class="p">:</span>
-        <span class="c"># 从群组里面移除文章。</span>
-        <span class="n">conn</span><span class="o">.</span><span class="n">srem</span><span class="p">(</span><span class="s">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span>
+        <span class="c1"># 从群组里面移除文章。</span>
+        <span class="n">conn</span><span class="o">.</span><span class="n">srem</span><span class="p">(</span><span class="s1">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">article</span><span class="p">)</span>
 </pre></div>
 </div>
 <hr class="docutils" />
 <p>初看上去，可能会有读者觉得使用集合来记录群组文章并没有多大用处。到目前为止，读者只看到了集合结构检查某个元素是否存在的能力，但实际上Redis不仅可以对多个集合执行操作，甚至在一些情况下，还可以在集合和有序集合之间执行操作。</p>
-<p>为了能够根据评分对群组文章进行排序和分页（paging），网站需要将同一个群组里面的所有文章都按照评分有序地存储到一个有序集合里面。Redis的<code class="docutils literal"><span class="pre">ZINTERSTORE</span></code>命令可以接受多个集合和多个有序集合作为输入，找出所有同时存在于集合和有序集合的成员，并以几种不同的方式来合并（combine）这些成员的分值（所有集合成员的分值都会被视为是1）。对于我们的文章投票网站来说，程序需要使用<code class="docutils literal"><span class="pre">ZINTERSTORE</span></code>命令选出相同成员中最大的那个分值来作为交集成员的分值：取决于所使用的排序选项，这些分值既可以是文章的评分，也可以是文章的发布时间。</p>
-<p>图1-12展示了对一个包含少量文章的群组集合和一个包含大量文章及评分的有序集合执行<code class="docutils literal"><span class="pre">ZINTERSTORE</span></code>命令的过程，注意观察那些同时出现在集合和有序集合里面的文章是怎样被添加到结果有序集合里面的。</p>
+<p>为了能够根据评分对群组文章进行排序和分页（paging），网站需要将同一个群组里面的所有文章都按照评分有序地存储到一个有序集合里面。Redis的<code class="docutils literal notranslate"><span class="pre">ZINTERSTORE</span></code>命令可以接受多个集合和多个有序集合作为输入，找出所有同时存在于集合和有序集合的成员，并以几种不同的方式来合并（combine）这些成员的分值（所有集合成员的分值都会被视为是1）。对于我们的文章投票网站来说，程序需要使用<code class="docutils literal notranslate"><span class="pre">ZINTERSTORE</span></code>命令选出相同成员中最大的那个分值来作为交集成员的分值：取决于所使用的排序选项，这些分值既可以是文章的评分，也可以是文章的发布时间。</p>
+<p>图1-12展示了对一个包含少量文章的群组集合和一个包含大量文章及评分的有序集合执行<code class="docutils literal notranslate"><span class="pre">ZINTERSTORE</span></code>命令的过程，注意观察那些同时出现在集合和有序集合里面的文章是怎样被添加到结果有序集合里面的。</p>
 <hr class="docutils" />
 <img alt="../_images/1-12.png" src="../_images/1-12.png" />
-<p>图1-12  对集合<code class="docutils literal"><span class="pre">groups:programming</span></code>和有序集合<code class="docutils literal"><span class="pre">score:</span></code>进行交集计算得出了新的有序集合<code class="docutils literal"><span class="pre">score:programming</span></code>，它包含了所有同时存在于集合<code class="docutils literal"><span class="pre">groups:programming</span></code>和有序集合<code class="docutils literal"><span class="pre">score:</span></code>的成员。因为集合<code class="docutils literal"><span class="pre">groups:programming</span></code>的所有成员的分值都被视为是<code class="docutils literal"><span class="pre">1</span></code>，而有序集合<code class="docutils literal"><span class="pre">score:</span></code>的所有成员的分值都大于<code class="docutils literal"><span class="pre">1</span></code>，并且这次交集计算挑选的分值为相同成员中的最大分值，所以有序集合<code class="docutils literal"><span class="pre">score:programming</span></code>的成员的分值实际上是由有序集合<code class="docutils literal"><span class="pre">score:</span></code>的成员的分值来决定的</p>
+<p>图1-12  对集合<code class="docutils literal notranslate"><span class="pre">groups:programming</span></code>和有序集合<code class="docutils literal notranslate"><span class="pre">score:</span></code>进行交集计算得出了新的有序集合<code class="docutils literal notranslate"><span class="pre">score:programming</span></code>，它包含了所有同时存在于集合<code class="docutils literal notranslate"><span class="pre">groups:programming</span></code>和有序集合<code class="docutils literal notranslate"><span class="pre">score:</span></code>的成员。因为集合<code class="docutils literal notranslate"><span class="pre">groups:programming</span></code>的所有成员的分值都被视为是<code class="docutils literal notranslate"><span class="pre">1</span></code>，而有序集合<code class="docutils literal notranslate"><span class="pre">score:</span></code>的所有成员的分值都大于<code class="docutils literal notranslate"><span class="pre">1</span></code>，并且这次交集计算挑选的分值为相同成员中的最大分值，所以有序集合<code class="docutils literal notranslate"><span class="pre">score:programming</span></code>的成员的分值实际上是由有序集合<code class="docutils literal notranslate"><span class="pre">score:</span></code>的成员的分值来决定的</p>
 <hr class="docutils" />
-<p>通过对存储群组文章的集合和存储文章评分的有序集合执行<code class="docutils literal"><span class="pre">ZINTERSTORE</span></code>命令，程序可以得到按照文章评分排序的群组文章；而通过对存储群组文章的集合和存储文章发布时间的有序集合执行<code class="docutils literal"><span class="pre">ZINTERSTORE</span></code>命令，程序则可以得到按照文章发布时间排序的群组文章。如果群组包含的文章非常多，那么执行<code class="docutils literal"><span class="pre">ZINTERSTORE</span></code>命令就会比较花时间，为了尽量减少Redis的工作量，程序会将这个命令的计算结果缓存60秒。另外，我们还重用了已有的<code class="docutils literal"><span class="pre">get_articles()</span></code>函数来分页并获取群组文章，代码清单1-10展示了网站从群组里面获取一整页文章的方法。</p>
+<p>通过对存储群组文章的集合和存储文章评分的有序集合执行<code class="docutils literal notranslate"><span class="pre">ZINTERSTORE</span></code>命令，程序可以得到按照文章评分排序的群组文章；而通过对存储群组文章的集合和存储文章发布时间的有序集合执行<code class="docutils literal notranslate"><span class="pre">ZINTERSTORE</span></code>命令，程序则可以得到按照文章发布时间排序的群组文章。如果群组包含的文章非常多，那么执行<code class="docutils literal notranslate"><span class="pre">ZINTERSTORE</span></code>命令就会比较花时间，为了尽量减少Redis的工作量，程序会将这个命令的计算结果缓存60秒。另外，我们还重用了已有的<code class="docutils literal notranslate"><span class="pre">get_articles()</span></code>函数来分页并获取群组文章，代码清单1-10展示了网站从群组里面获取一整页文章的方法。</p>
 <hr class="docutils" />
-<p>代码清单1-10  <code class="docutils literal"><span class="pre">get_group_articles()</span></code>函数</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">get_group_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s">&#39;score:&#39;</span><span class="p">):</span>
-    <span class="c"># 为每个群组的每种排列顺序都创建一个键。</span>
+<p>代码清单1-10  <code class="docutils literal notranslate"><span class="pre">get_group_articles()</span></code>函数</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">get_group_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">group</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;score:&#39;</span><span class="p">):</span>
+    <span class="c1"># 为每个群组的每种排列顺序都创建一个键。</span>
     <span class="n">key</span> <span class="o">=</span> <span class="n">order</span> <span class="o">+</span> <span class="n">group</span>
-    <span class="c"># 检查是否有已缓存的排序结果，如果没有的话就现在进行排序。</span>
+    <span class="c1"># 检查是否有已缓存的排序结果，如果没有的话就现在进行排序。</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">conn</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
-        <span class="c"># 根据评分或者发布时间，对群组文章进行排序。</span>
+        <span class="c1"># 根据评分或者发布时间，对群组文章进行排序。</span>
         <span class="n">conn</span><span class="o">.</span><span class="n">zinterstore</span><span class="p">(</span><span class="n">key</span><span class="p">,</span>
-            <span class="p">[</span><span class="s">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">order</span><span class="p">],</span>
-            <span class="n">aggregate</span><span class="o">=</span><span class="s">&#39;max&#39;</span><span class="p">,</span>
+            <span class="p">[</span><span class="s1">&#39;group:&#39;</span> <span class="o">+</span> <span class="n">group</span><span class="p">,</span> <span class="n">order</span><span class="p">],</span>
+            <span class="n">aggregate</span><span class="o">=</span><span class="s1">&#39;max&#39;</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="c"># 让Redis在60秒钟之后自动删除这个有序集合。</span>
+        <span class="c1"># 让Redis在60秒钟之后自动删除这个有序集合。</span>
         <span class="n">conn</span><span class="o">.</span><span class="n">expire</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span>
-    <span class="c"># 调用之前定义的get_articles()函数来进行分页并获取文章数据。</span>
+    <span class="c1"># 调用之前定义的get_articles()函数来进行分页并获取文章数据。</span>
     <span class="k">return</span> <span class="n">get_articles</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">page</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
 </pre></div>
 </div>
 <hr class="docutils" />
-<p>有些网站只允许用户将文章放在一个或者两个群组里面（其中一个是“所有文章”群组，另一个是最适合文章的群组）。在这种情况下，最好直接将文章所在的群组记录到存储文章信息的散列里面，并在<code class="docutils literal"><span class="pre">article_vote()</span></code>函数的末尾增加一个<code class="docutils literal"><span class="pre">ZINCRBY</span></code>命令调用，用于更新文章在群组中的评分。但在我们这个示例里，我们构建的文章投票网站允许一篇文章同时属于多个群组（比如一篇文章可以同时属于“编程”和“算法”两个群组），所以对于一篇同时属于多个群组的文章来说，更新文章的评分意味着程序需要对文章所属的全部群组执行自增操作。在这种情况下，如果一篇文章同时属于很多个群组，那么更新文章评分这一操作可能会变得相当耗时，因此，我们在<code class="docutils literal"><span class="pre">get_group_articles()</span></code>函数里面对<code class="docutils literal"><span class="pre">ZINTERSTORE</span></code>命令的执行结果进行了缓存处理，以此来尽量减少<code class="docutils literal"><span class="pre">ZINTERSTORE</span></code>命令的执行次数。开发者对于灵活性或局限性的选择将改变程序存储和更新数据的方式，这一点对于任何数据库都是适用的，Redis也不例外。</p>
+<p>有些网站只允许用户将文章放在一个或者两个群组里面（其中一个是“所有文章”群组，另一个是最适合文章的群组）。在这种情况下，最好直接将文章所在的群组记录到存储文章信息的散列里面，并在<code class="docutils literal notranslate"><span class="pre">article_vote()</span></code>函数的末尾增加一个<code class="docutils literal notranslate"><span class="pre">ZINCRBY</span></code>命令调用，用于更新文章在群组中的评分。但在我们这个示例里，我们构建的文章投票网站允许一篇文章同时属于多个群组（比如一篇文章可以同时属于“编程”和“算法”两个群组），所以对于一篇同时属于多个群组的文章来说，更新文章的评分意味着程序需要对文章所属的全部群组执行自增操作。在这种情况下，如果一篇文章同时属于很多个群组，那么更新文章评分这一操作可能会变得相当耗时，因此，我们在<code class="docutils literal notranslate"><span class="pre">get_group_articles()</span></code>函数里面对<code class="docutils literal notranslate"><span class="pre">ZINTERSTORE</span></code>命令的执行结果进行了缓存处理，以此来尽量减少<code class="docutils literal notranslate"><span class="pre">ZINTERSTORE</span></code>命令的执行次数。开发者对于灵活性或局限性的选择将改变程序存储和更新数据的方式，这一点对于任何数据库都是适用的，Redis也不例外。</p>
 <div class="admonition note">
-<p class="first admonition-title">Note</p>
+<p class="admonition-title">Note</p>
 <p>练习：实现投反对票的功能</p>
-<p class="last">我们的示例目前只实现了投支持票的功能，但是在很多实际的网站里面，反对票也能给用户提供有用的反馈信息。因此，请读者能想办法在<code class="docutils literal"><span class="pre">article_vote()</span></code>函数和<code class="docutils literal"><span class="pre">post_article()</span></code>函数里面添加投反对票的功能。除此之外，读者还可以尝试为用户提供对调投票的功能：比如将支持票转换成反对票，或者将反对票转换成支持票。提示：如果读者在实现对调投票功能时出现了困难，可以参考一下第3章介绍的<code class="docutils literal"><span class="pre">SMOVE</span></code>命令。</p>
+<p>我们的示例目前只实现了投支持票的功能，但是在很多实际的网站里面，反对票也能给用户提供有用的反馈信息。因此，请读者能想办法在<code class="docutils literal notranslate"><span class="pre">article_vote()</span></code>函数和<code class="docutils literal notranslate"><span class="pre">post_article()</span></code>函数里面添加投反对票的功能。除此之外，读者还可以尝试为用户提供对调投票的功能：比如将支持票转换成反对票，或者将反对票转换成支持票。提示：如果读者在实现对调投票功能时出现了困难，可以参考一下第3章介绍的<code class="docutils literal notranslate"><span class="pre">SMOVE</span></code>命令。</p>
 </div>
 <p>现在我们可以获取文章、发布文章、对文章进行投票、甚至还可以对文章进行分组，已经成功地构建起了一个展示最受欢迎文章的网站后端。走到这一步应该祝贺一下！如果你觉得前面展示的内容不好理解，或者弄不懂这些示例，又或者没办法运行本书提供的源代码，那么请阅读下一节来了解如何获取帮助。</p>
 </div>
@@ -753,18 +756,14 @@ redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores
 <p>在阅读本书的后续章节时，请读者注意自己解决问题的方式发生了什么变化：你也许会惊讶地发现，自己思考数据问题的方式已经从原来的“怎样将我的想法塞进数据库的表和行里面”，变成了“使用哪种Redis数据结构来解决这个问题比较好呢？”。</p>
 <p>接下来的第2章将介绍使用Redis构建Web应用的方法，阅读这一章可以帮助你更好地了解Redis的用法和用途。</p>
 <hr class="docutils" />
-<table class="docutils footnote" frame="void" id="f1" rules="none">
-<colgroup><col class="label" /><col /></colgroup>
-<tbody valign="top">
-<tr><td class="label"><a class="fn-backref" href="#id2">[1]</a></td><td>分片是一种将数据划分为多个部分的方法，对数据的划分可以基于键包含的ID、基于键的哈希值，或者基于以上两者的某种组合。通过对数据进行分片，用户可以将数据存储到多台机器里面，也可以从多台机器里面获取数据，这种方法在解决某些问题时可以获得线性级别的性能提升。</td></tr>
-</tbody>
-</table>
-<table class="docutils footnote" frame="void" id="f2" rules="none">
-<colgroup><col class="label" /><col /></colgroup>
-<tbody valign="top">
-<tr><td class="label"><a class="fn-backref" href="#id6">[2]</a></td><td>客观来讲，memcached也能用在这个简单的场景里，但使用Redis存储聚合数据有以下三个好处：首先，使用Redis可以将彼此相关的聚合数据放在同一个结构里面，这样访问聚合数据就会变得更为容易；其次，使用Redis可以将聚合数据放到有序集合里面，构建出一个实时的排行榜；最后，Redis的聚合数据可以是整数或者浮点数，而memcached的聚合数据只能是整数。</td></tr>
-</tbody>
-</table>
+<dl class="footnote brackets">
+<dt class="label" id="f1"><span class="brackets"><a class="fn-backref" href="#id2">1</a></span></dt>
+<dd><p>分片是一种将数据划分为多个部分的方法，对数据的划分可以基于键包含的ID、基于键的哈希值，或者基于以上两者的某种组合。通过对数据进行分片，用户可以将数据存储到多台机器里面，也可以从多台机器里面获取数据，这种方法在解决某些问题时可以获得线性级别的性能提升。</p>
+</dd>
+<dt class="label" id="f2"><span class="brackets"><a class="fn-backref" href="#id6">2</a></span></dt>
+<dd><p>客观来讲，memcached也能用在这个简单的场景里，但使用Redis存储聚合数据有以下三个好处：首先，使用Redis可以将彼此相关的聚合数据放在同一个结构里面，这样访问聚合数据就会变得更为容易；其次，使用Redis可以将聚合数据放到有序集合里面，构建出一个实时的排行榜；最后，Redis的聚合数据可以是整数或者浮点数，而memcached的聚合数据只能是整数。</p>
+</dd>
+</dl>
 </div>
 </div>
 
@@ -813,7 +812,7 @@ redis 127.0.0.1:6379&gt; zrange zset-key 0 -1 withscores
     </div>
     <div class="footer">
         &copy; Copyright 2015, 黄健宏（huangz）.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.3.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.0.1.
     </div>
   </body>
 </html>

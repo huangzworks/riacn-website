@@ -23,6 +23,9 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
     <link rel="top" title="Redis 实战" href="../index.html" /> 
 
 <!--[if lte IE 6]>
@@ -51,48 +54,47 @@
             
   <div class="section" id="der">
 <h1>DER<a class="headerlink" href="#der" title="Permalink to this headline">¶</a></h1>
-<p><code class="docutils literal"><span class="pre">DER</span> <span class="pre">==</span> <span class="pre">reverse(&quot;RED&quot;)</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">DER</span> <span class="pre">==</span> <span class="pre">reverse(&quot;RED&quot;)</span></code></p>
 <p>本项目是 <a class="reference external" href="http://www.redisbook.com">《Redis 设计与实现》</a> 所使用的 Sphinx 样式。</p>
 <p>样式特点：</p>
 <ul class="simple">
-<li>单色调简单风格（默认为红色，但很容易就可以修改成其他颜色）</li>
-<li>醒目的 <code class="docutils literal"><span class="pre">h1</span></code> 标题</li>
-<li>清晰的、可以高效地对文本进行视线分割的 <code class="docutils literal"><span class="pre">h2</span></code> 标题</li>
-<li>固定大小、居中显示、百分比字体大小，布局健壮，适用于多种不同的屏幕环境</li>
+<li><p>单色调简单风格（默认为红色，但很容易就可以修改成其他颜色）</p></li>
+<li><p>醒目的 <code class="docutils literal notranslate"><span class="pre">h1</span></code> 标题</p></li>
+<li><p>清晰的、可以高效地对文本进行视线分割的 <code class="docutils literal notranslate"><span class="pre">h2</span></code> 标题</p></li>
+<li><p>固定大小、居中显示、百分比字体大小，布局健壮，适用于多种不同的屏幕环境</p></li>
 </ul>
 <div class="section" id="id1">
 <h2>使用方法<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
 <ol class="arabic simple">
-<li>克隆本项目。</li>
-<li>修改 sphinx 项目 <code class="docutils literal"><span class="pre">conf.py</span></code> 文件中的 <code class="docutils literal"><span class="pre">html_theme_path</span></code> 变量，让它指向 <code class="docutils literal"><span class="pre">der</span></code> 文件夹所在的位置。</li>
-<li>修改 sphinx 项目 <code class="docutils literal"><span class="pre">conf.py</span></code> 文件中的 <code class="docutils literal"><span class="pre">html_theme</span></code> 变量的值为 <code class="docutils literal"><span class="pre">der</span></code> 。</li>
-<li>完成！</li>
+<li><p>克隆本项目。</p></li>
+<li><p>修改 sphinx 项目 <code class="docutils literal notranslate"><span class="pre">conf.py</span></code> 文件中的 <code class="docutils literal notranslate"><span class="pre">html_theme_path</span></code> 变量，让它指向 <code class="docutils literal notranslate"><span class="pre">der</span></code> 文件夹所在的位置。</p></li>
+<li><p>修改 sphinx 项目 <code class="docutils literal notranslate"><span class="pre">conf.py</span></code> 文件中的 <code class="docutils literal notranslate"><span class="pre">html_theme</span></code> 变量的值为 <code class="docutils literal notranslate"><span class="pre">der</span></code> 。</p></li>
+<li><p>完成！</p></li>
 </ol>
 </div>
 <div class="section" id="disqus">
 <h2>开启 disqus 支持<a class="headerlink" href="#disqus" title="Permalink to this headline">¶</a></h2>
 <ol class="arabic">
-<li><p class="first">编辑 <code class="docutils literal"><span class="pre">der</span></code> 文件夹中的 <code class="docutils literal"><span class="pre">layout.html</span></code> 文件，修改文件中和 disqus 有关的语句：</p>
-<div class="highlight-python"><div class="highlight"><pre>{# note: remove this comment if you want to enable disqus support
+<li><p>编辑 <code class="docutils literal notranslate"><span class="pre">der</span></code> 文件夹中的 <code class="docutils literal notranslate"><span class="pre">layout.html</span></code> 文件，修改文件中和 disqus 有关的语句：</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="c1"># note: remove this comment if you want to enable disqus support</span>
 
-{% include &quot;disqus.html&quot; %}
+<span class="p">{</span><span class="o">%</span> <span class="n">include</span> <span class="s2">&quot;disqus.html&quot;</span> <span class="o">%</span><span class="p">}</span>
 
-#}
+<span class="c1">#}</span>
 </pre></div>
 </div>
 <p>只保留这一句：</p>
-<div class="highlight-python"><div class="highlight"><pre>{% include &quot;disqus.html&quot; %}
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="o">%</span> <span class="n">include</span> <span class="s2">&quot;disqus.html&quot;</span> <span class="o">%</span><span class="p">}</span>
 </pre></div>
 </div>
 </li>
-<li><p class="first">编辑 <code class="docutils literal"><span class="pre">der</span></code> 文件夹中的 <code class="docutils literal"><span class="pre">disqus.html</span></code> 文件，将其中的</p>
-<div class="highlight-python"><div class="highlight"><pre>var disqus_shortname = &#39;YOUR-DISQUS-FORUM-SHORTNAME&#39;;
+<li><p>编辑 <code class="docutils literal notranslate"><span class="pre">der</span></code> 文件夹中的 <code class="docutils literal notranslate"><span class="pre">disqus.html</span></code> 文件，将其中的</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">var</span> <span class="n">disqus_shortname</span> <span class="o">=</span> <span class="s1">&#39;YOUR-DISQUS-FORUM-SHORTNAME&#39;</span><span class="p">;</span>
 </pre></div>
 </div>
-<p>中的 <code class="docutils literal"><span class="pre">YOUR-DISQUS-FORUM-SHORTNAME</span></code> 替换成你的 disqus 论坛的名字。</p>
+<p>中的 <code class="docutils literal notranslate"><span class="pre">YOUR-DISQUS-FORUM-SHORTNAME</span></code> 替换成你的 disqus 论坛的名字。</p>
 </li>
-<li><p class="first">完成！</p>
-</li>
+<li><p>完成！</p></li>
 </ol>
 </div>
 <div class="section" id="id2">
@@ -105,10 +107,10 @@
 </div>
 <p>Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:</p>
 <ul class="simple">
-<li>Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.</li>
-<li>Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.</li>
+<li><p>Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.</p></li>
+<li><p>Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.</p></li>
 </ul>
-<p>THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &#8220;AS IS&#8221; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</p>
+<p>THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</p>
 </div>
 </div>
 
@@ -151,7 +153,7 @@
     </div>
     <div class="footer">
         &copy; Copyright 2015, 黄健宏（huangz）.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.3.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 2.0.1.
     </div>
   </body>
 </html>
