@@ -7,7 +7,7 @@ Redis实战
 ======================================
 
 .. image:: ria-cover.png
-   :align: left
+   :align: right
 
 欢迎来到《Redis实战》的支持网站！
 
@@ -26,19 +26,16 @@ Redis实战
 应该都能从本书中获益。
 
 
-购买方法
+购买方式
 ------------------
 
 购买纸质书请访问以下网店：
 `异步社区 <http://www.epubit.com.cn/book/details/4035>`_ 、
 `京东 <http://item.jd.com/11791607.html>`_ 、
-`亚马逊 <http://www.amazon.cn/Redis%E5%AE%9E%E6%88%98-%E7%BE%8E-%E7%BA%A6%E8%A5%BF%E4%BA%9A-L-%E5%8D%A1%E5%B0%94%E6%A3%AE/dp/B016YLS2LM>`_ 、
-`互动出版网 <http://product.china-pub.com/4881439>`_ 、
 `当当 <http://product.dangdang.com/23800641.html>`_ 
 
 购买电子书请访问以下网店：
 `异步社区 <http://www.epubit.com.cn/book/details/4035>`_ 、
-`亚马逊 Kindle 版本 <https://www.amazon.cn/gp/product/B01IV39S0K>`_ 。
 
 查看目录并试读
 -------------------
@@ -157,20 +154,20 @@ Redis实战
 译者将这些源代码的注释都翻译成了中文，
 你可以在以下页面中在线阅读这些源代码：
 
-- `第 1 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch01_listing_source.py>`_
-- `第 2 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch02_listing_source.py>`_
-- `第 3 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch03_listing_source.py>`_
-- `第 4 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch04_listing_source.py>`_
-- `第 5 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch05_listing_source.py>`_
-- `第 6 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch06_listing_source.py>`_
-- `第 7 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch07_listing_source.py>`_
-- `第 8 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch08_listing_source.py>`_
-- `第 9 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch09_listing_source.py>`_
-- `第 10 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch10_listing_source.py>`_
-- `第 11 章相关源码 <https://github.com/huangz1990/riacn-code/blob/master/ch11_listing_source.py>`_
-- `附录 A 相关源码 <https://github.com/huangz1990/riacn-code/blob/master/chA_listing_source.py>`_
+- `第 1 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch01_listing_source.py>`_
+- `第 2 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch02_listing_source.py>`_
+- `第 3 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch03_listing_source.py>`_
+- `第 4 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch04_listing_source.py>`_
+- `第 5 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch05_listing_source.py>`_
+- `第 6 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch06_listing_source.py>`_
+- `第 7 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch07_listing_source.py>`_
+- `第 8 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch08_listing_source.py>`_
+- `第 9 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch09_listing_source.py>`_
+- `第 10 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch10_listing_source.py>`_
+- `第 11 章相关源码 <https://github.com/huangzworks/riacn-code/blob/master/ch11_listing_source.py>`_
+- `附录 A 相关源码 <https://github.com/huangzworks/riacn-code/blob/master/chA_listing_source.py>`_
 
-又或者到 https://github.com/huangz1990/riacn-code 下载这些源代码。
+又或者到 https://github.com/huangzworks/riacn-code 下载这些源代码。
 
 
 作者简介
@@ -203,7 +200,7 @@ Josiah 加入了 Redis 邮件列表，
 Josiah 开始创作这本《Redis 实战》。
 
 要了解关于《Redis 实战》作者 Josiah Carlson 博士的更多信息，
-请访问他的 `twitter <https://twitter.com/dr_josiah>`_ 、 `博客 <http://www.dr-josiah.com/>`_ 或者 `github <https://github.com/josiahcarlson>`_ 。
+请访问他的 `博客 <http://www.dr-josiah.com/>`_ 或者 `github <https://github.com/josiahcarlson>`_ 。
 
 
 作序者简介
@@ -228,31 +225,32 @@ Redis 的作者 Salvatore Sanfilippo 亲自为《Redis实战》撰写了序言�
 
 黄健宏（huangz）在 2011 年开始接触 Redis 以来就一直在学习和研究 Redis ，
 他从 Redis 2.4 开始阅读并追踪 Redis 的源码，
-对 `Redis 2.6 <https://github.com/huangz1990/annotated_redis_source>`_ 以及 `Redis 3.0 <https://github.com/huangz1990/redis-3.0-annotated>`_ 的源码进行了详细的注释，
-并通过分析源码创作了\ `《Redis 设计与实现》 <http://redisbook.com>`_\ 一书。
+对 `Redis 2.6 <https://github.com/huangzworks/annotated_redis_source>`_ 以及 `Redis 3.0 <https://github.com/huangzworks/redis-3.0-annotated>`_ 的源码进行了详细的注释，
+并通过分析源码创作了\ `《Redis 设计与实现》 <http://huangz.works/redisbook1e>`_\ 一书。
 
 除此之外，
-黄健宏还是 Redis 中文文档\ `《Redis 命令参考》 <http://RedisDoc.com>`_\ 的译者。
+黄健宏还是 Redis 中文文档《Redis 命令参考》的译者。
 
 要了解关于《Redis 实战》译者黄健宏的更多信息，
-请访问他的个人主页 `huangz.me <http://huangz.me>`_ 。
+请访问他的个人主页 `huangz.works <http://huangz.works>`_ 。
 
 
 相关资源
 -----------
 
 《Redis实战》用例目录，这篇文章逐一罗列了书中给出的各个 Redis 应用示例，以及这些示例的源码，方便读者参考： 
-http://blog.huangz.me/diary/2015/redis-usages-in-ria.html
+http://huangz.blog/2015/redis-usages-in-ria.html
 
-在线阅读《Redis实战》英文原版《Redis in Action》：
-https://redislabs.com/academy/redis-in-action
+..
+        在线阅读《Redis实战》英文原版《Redis in Action》：
+        https://redislabs.com/academy/redis-in-action
 
 《Redis in Action》在 Manning 出版社的介绍页面：
 https://www.manning.com/books/redis-in-action
 
 《Redis实战》翻译记事，
 这篇文章记录了《Redis实战》的诞生过程：
-http://blog.huangz.me/diary/2015/memories-of-redis-in-action-translation.html
+http://huangz.blog/2015/memories-of-redis-in-action-translation.html
 
 《Redis实战》的豆瓣页面：
 http://book.douban.com/subject/26612779/
@@ -271,7 +269,7 @@ http://book.douban.com/subject/26612779/
 
 如果读者在阅读的过程中发现书本存在错误，
 可以在本网站附带的 disque 论坛里面进行反馈，
-又或者通过 huangz.me 页面展示的任意一种联系方式来联系作者。
+又或者通过 `huangz.works <https://huangz.works>`_ 页面展示的任意一种联系方式来联系作者。
 
 
 参加群讨论
@@ -280,4 +278,4 @@ http://book.douban.com/subject/26612779/
 欢迎各位《Redis命令参考》读者加入译者开设的 QQ 群，
 你可以在里面分享你的 Redis 使用心得，
 又或者跟其他群友讨论你在使用 Redis 过程中遇到的问题，
-具体的群号请访问译者的\ `个人主页 <http://huangz.me>`_ 查看。
+具体的群号请访问译者的\ `个人主页 <https://huangz.works>`_ 查看。
